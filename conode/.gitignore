@@ -1,1 +1,6 @@
 /conode
+*.db
+co?/
+log/
+running
+public.toml
