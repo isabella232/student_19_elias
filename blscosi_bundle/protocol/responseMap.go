@@ -146,11 +146,7 @@ func (treeRes TreeResponses) Add(idx int, r *Response) error {
 	if err != nil {
 		return err
 	}
-
-	err = mask.Merge(r.Mask)
-	if err != nil {
-		return err
-	}
+	mask.Merge(r.Mask)
 
 	sig := [][]byte{r.Signature}
 	aggSig, err := bdn.AggregateSignatures(treeRes.suite, sig, mask)
@@ -220,16 +216,10 @@ func (treeRes TreeResponses) addAggregated(idx uint32, sig []byte, mask *sign.Ma
 			}
 		}
 
-		err = treeRes.addAggregated(parent, aggSig, mask)
-		if err != nil {
-			return err
-		}
+		treeRes.addAggregated(parent, aggSig, mask)
 	} else {
 		treeRes.responses[idx] = &Response{sig, mask.Mask()}
-		err := treeRes.mask.Merge(mask.Mask())
-		if err != nil {
-			return err
-		}
+		treeRes.mask.Merge(mask.Mask())
 
 		// delete all nodes below
 		var d []uint32 // descendents, stack
@@ -255,12 +245,7 @@ func (treeRes TreeResponses) Update(newResponses map[uint32](*Response)) error {
 		if err != nil {
 			return err
 		}
-
-		err = mask.Merge(resp.Mask)
-		if err != nil {
-			return err
-		}
-
+		mask.Merge(resp.Mask)
 		err = treeRes.addAggregated(k, resp.Signature, mask)
 		if err != nil {
 			return err
