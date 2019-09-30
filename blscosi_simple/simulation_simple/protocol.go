@@ -23,8 +23,8 @@ import (
 	"fmt"
 
 	"github.com/BurntSushi/toml"
-	blscosi "github.com/dedis/student_19_gossip_bls/blscosi_simple"
-	"github.com/dedis/student_19_gossip_bls/blscosi_simple/protocol"
+	blscosi "github.com/dedis/student_19_elias/blscosi_simple"
+	"github.com/dedis/student_19_elias/blscosi_simple/protocol"
 	"go.dedis.ch/kyber/v3/pairing"
 	"go.dedis.ch/onet/v3"
 	"go.dedis.ch/onet/v3/log"

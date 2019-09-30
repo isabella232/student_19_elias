@@ -6,16 +6,16 @@ The aim of this semester project is to build a gossip protocol for building coll
 ## Install and run
 
 ```
-env GO111MODULE=on go get github.com/dedis/student_19_gossip_bls
+env GO111MODULE=on go get github.com/dedis/student_19_elias
 ```
 
-Navigate to `student_19_gossip_bls/blscosi_bundle/blscosi_bundle/`.
+Navigate to `student_19_elias/blscosi_bundle/blscosi_bundle/`.
 
 ```
 env GO111MODULE=on go install
 ```
 
-Navigate to `student_19_gossip_bls/conode/`.
+Navigate to `student_19_elias/conode/`.
 
 ```
 env GO111MODULE=on go build
@@ -33,7 +33,7 @@ blscosi_bundle verify -o sig.json date
 
 ## Run a simulation
 
-Navigate to `student_19_gossip_bls/blscosi_bundle/simulation_bundle/`.
+Navigate to `student_19_elias/blscosi_bundle/simulation_bundle/`.
 
 ```
 env GO111MODULE=on go install

@@ -1,4 +1,4 @@
-module github.com/dedis/student_19_gossip_bls
+module github.com/dedis/student_19_elias
 
 require (
 	cloud.google.com/go v0.39.0 // indirect
@@ -33,3 +33,5 @@ require (
 	gopkg.in/urfave/cli.v1 v1.20.0
 	honnef.co/go/tools v0.0.0-20190602125119-5a4a2f4a438d // indirect
 )
+
+go 1.13

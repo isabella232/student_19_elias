@@ -10,8 +10,8 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/dedis/student_19_gossip_bls/blscosi_bundle"
-	"github.com/dedis/student_19_gossip_bls/blscosi_bundle/blscosi_bundle/check"
+	"github.com/dedis/student_19_elias/blscosi_bundle"
+	"github.com/dedis/student_19_elias/blscosi_bundle/blscosi_bundle/check"
 	"go.dedis.ch/onet/v3/app"
 	"go.dedis.ch/onet/v3/log"
 	cli "gopkg.in/urfave/cli.v1"

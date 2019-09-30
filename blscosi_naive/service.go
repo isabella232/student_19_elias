@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/dedis/student_19_gossip_bls/blscosi_naive/protocol"
+	"github.com/dedis/student_19_elias/blscosi_naive/protocol"
 	"go.dedis.ch/kyber/v3/pairing"
 	"go.dedis.ch/kyber/v3/suites"
 	"go.dedis.ch/onet/v3"

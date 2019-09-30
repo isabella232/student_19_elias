@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dedis/student_19_gossip_bls/blscosi_naive"
+	"github.com/dedis/student_19_elias/blscosi_naive"
 	"go.dedis.ch/kyber/v3/pairing"
 	"go.dedis.ch/onet/v3"
 	"go.dedis.ch/onet/v3/app"
