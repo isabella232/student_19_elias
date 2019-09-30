@@ -10,8 +10,8 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/dedis/student_19_elias/blscosi_bundle"
-	"github.com/dedis/student_19_elias/blscosi_bundle/blscosi_bundle/check"
+	"github.com/dedis/student_19_elias/blscosi_withpull"
+	"github.com/dedis/student_19_elias/blscosi_withpull/blscosi_withpull/check"
 	"go.dedis.ch/onet/v3/app"
 	"go.dedis.ch/onet/v3/log"
 	cli "gopkg.in/urfave/cli.v1"
@@ -87,7 +87,7 @@ func verifyFile(c *cli.Context) error {
 }
 
 // writeSigAsJSON - writes the JSON out to a file
-func writeSigAsJSON(res *blscosi_bundle.SignatureResponse, outW io.Writer) error {
+func writeSigAsJSON(res *blscosi_withpull.SignatureResponse, outW io.Writer) error {
 	b, err := json.Marshal(sigHex{
 		Hash:      hex.EncodeToString(res.Hash),
 		Signature: hex.EncodeToString(res.Signature)},
@@ -113,7 +113,7 @@ func writeSigAsJSON(res *blscosi_bundle.SignatureResponse, outW io.Writer) error
 }
 
 // sign takes a byte slice and a toml file defining the servers
-func sign(msg []byte, tomlFileName string) (*blscosi_bundle.SignatureResponse, error) {
+func sign(msg []byte, tomlFileName string) (*blscosi_withpull.SignatureResponse, error) {
 	log.Lvl2("Starting signature")
 	f, err := os.Open(tomlFileName)
 	if err != nil {
@@ -161,7 +161,7 @@ func verify(fileName, sigFileName, groupToml string) error {
 		return err
 	}
 
-	sig := &blscosi_bundle.SignatureResponse{}
+	sig := &blscosi_withpull.SignatureResponse{}
 	sig.Hash, err = hex.DecodeString(sigStr.Hash)
 	if err != nil {
 		return err

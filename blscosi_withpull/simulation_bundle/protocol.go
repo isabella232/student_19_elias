@@ -25,8 +25,8 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	blscosi "github.com/dedis/student_19_elias/blscosi_bundle"
-	"github.com/dedis/student_19_elias/blscosi_bundle/protocol"
+	blscosi "github.com/dedis/student_19_elias/blscosi_withpull"
+	"github.com/dedis/student_19_elias/blscosi_withpull/protocol"
 	"go.dedis.ch/kyber/v3/pairing"
 	"go.dedis.ch/onet/v3"
 	"go.dedis.ch/onet/v3/log"

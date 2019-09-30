@@ -1,4 +1,4 @@
-package blscosi_bundle
+package blscosi_withpull
 
 import (
 	"errors"
@@ -13,7 +13,7 @@ type Client struct {
 	*onet.Client
 }
 
-// NewClient instantiates a new blscosi_bundle.Client
+// NewClient instantiates a new blscosi_withpull.Client
 func NewClient() *Client {
 	return &Client{Client: onet.NewClient(suite, ServiceName)}
 }
