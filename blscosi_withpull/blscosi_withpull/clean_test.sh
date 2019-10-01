@@ -2,26 +2,15 @@
 
 DBG_TEST=2
 # Debug-level for app
-DBG_APP=5
+DBG_APP=2
 CLEANBUILD=1
 
 . ../../libtest.sh
 
 main(){
-    startTest
-    for n in $(seq $NBR); do
-        srv=srv$n
-        rm -rf $srv
-        mkdir $srv
-        cl=cl$n
-        rm -rf $cl
-        mkdir $cl
-    done
-    run testBuild
-    run testServerCfg
-    run testSignFile
-    run testCheck
-    run testReconnect
+    fuser -k 3002/tcp
+    fuser -k 3004/tcp
+    fuser -k 3006/tcp
     stopTest
 }
 
@@ -98,7 +87,7 @@ runCl(){
 }
 
 runSrvCfg(){
-    echo -e "localhost:300$(( 2 * $1 ))\nCosi $1\n$(pwd)/srv$1\n" | ./blscosi_withpull server setup > $OUT
+    echo -e "localhost:200$(( 2 * $1 ))\nCosi $1\n$(pwd)/srv$1\n" | ./blscosi_withpull server setup > $OUT
 }
 
 runSrv(){
