@@ -51,6 +51,7 @@ type BlsCosi struct {
 
 	// internodes channels
 	RumorsChan   chan RumorMessage
+	PullChan     chan PullMessage
 	ShutdownChan chan ShutdownMessage
 }
 
@@ -88,7 +89,7 @@ func NewBlsCosi(n *onet.TreeNodeInstance, vf VerificationFn, suite *pairing.Suit
 		suite:            suite,
 	}
 
-	err := c.RegisterChannels(&c.RumorsChan, &c.ShutdownChan)
+	err := c.RegisterChannels(&c.RumorsChan, &c.PullChan, &c.ShutdownChan)
 	if err != nil {
 		return nil, errors.New("couldn't register channels: " + err.Error())
 	}
@@ -154,6 +155,16 @@ func (p *BlsCosi) Dispatch() error {
 			// Copy bytes due to the way protobuf allows the bytes to be
 			// shared with the underlying buffer
 			p.Msg = rumor.Msg[:]
+		case pullMsg := <-p.PullChan:
+			// Add pull content as initial rumor since it has the sender's signature
+			rumor = &Rumor{
+				Params:      pullMsg.Params,
+				ResponseMap: pullMsg.ResponseMap,
+				Msg:         pullMsg.Msg,
+			}
+			p.Params = rumor.Params
+			// Copy message bytes
+			p.Msg = rumor.Msg[:]
 		case shutdownMsg := <-p.ShutdownChan:
 			p.Params = shutdownMsg.Params
 			p.Msg = shutdownMsg.Msg[:]
@@ -171,27 +182,20 @@ func (p *BlsCosi) Dispatch() error {
 		}
 	}
 
-	// responses is a map where we collect all signatures.
-	var responses Responses
-	if p.Params.TreeMode {
-		var err error
-		responses, err = NewTreeResponses(p.suite, p.Publics())
-		if err != nil {
-			log.Lvl1("Failed to make TreeResponses")
-			return err
-		}
-	} else {
-		responses = make(SimpleResponses)
+	// Create response Map
+	responses, err := p.createResponseMap()
+	if err != nil {
+		return err
 	}
 
 	// Add own signature.
-	err := p.trySign(responses)
+	err = p.trySign(responses)
 	if err != nil {
 		return err
 	}
 
 	if rumor != nil {
-		err = responses.Update(rumor.ResponseMap)
+		err = responses.Update(rumor.ResponseMap, p)
 		if err != nil {
 			return err
 		}
@@ -203,7 +207,7 @@ func (p *BlsCosi) Dispatch() error {
 	for !shutdown {
 		select {
 		case rumor := <-p.RumorsChan:
-			err = responses.Update(rumor.ResponseMap)
+			err = responses.Update(rumor.ResponseMap, p)
 			if err != nil {
 				return err
 			}
@@ -216,6 +220,35 @@ func (p *BlsCosi) Dispatch() error {
 				//	res.mask.CountEnabled(), res.responses, res.mask.Mask())
 				shutdown = true
 			}
+		case pull := <-p.PullChan:
+			// Reply to pull message with your own signature
+			// Create new response Map
+			log.Lvlf5("Incoming pull message from %d", pull.TreeNode.ID)
+			// Create new response map for only this node
+			responsesPull, err := p.createResponseMap()
+			if err != nil {
+				return err
+			}
+			// Add own signature.
+			err = p.trySign(responsesPull)
+			if err != nil {
+				return err
+			}
+			// Send back a rumor with only this node's signature
+			p.sendRumor(pull.TreeNode, responsesPull)
+
+			//// Then handle message as a regular rumor, in case the new info is useful
+			//err = responses.Update(pull.ResponseMap, p)
+			//if err != nil {
+			//	return err
+			//}
+			//if p.IsRoot() && p.isEnough(responses) {
+			//	// We've got all the signatures.
+			//	//res := responses.(TreeResponses)
+			//	//log.Lvl5("Got all the signatures",
+			//	//	res.mask.CountEnabled(), res.responses, res.mask.Mask())
+			//	shutdown = true
+			//}
 		case shutdownMsg := <-p.ShutdownChan:
 			log.Lvl5("Received shutdown")
 			if err := p.verifyShutdown(shutdownMsg); err == nil {
@@ -286,6 +319,22 @@ func (p *BlsCosi) Dispatch() error {
 	return nil
 }
 
+func (p *BlsCosi) createResponseMap() (Responses, error) {
+	// responses is a map where we collect all signatures.
+	var responses Responses
+	if p.Params.TreeMode {
+		var err error
+		responses, err = NewTreeResponses(p.suite, p.Publics())
+		if err != nil {
+			log.Lvl1("Failed to make TreeResponses")
+			return nil, err
+		}
+	} else {
+		responses = make(SimpleResponses)
+	}
+	return responses, nil
+}
+
 func (p *BlsCosi) trySign(responses Responses) error {
 	if !p.verificationFn(p.Msg, p.Data) {
 		log.Lvlf4("Node %v refused to sign", p.ServerIdentity())
@@ -295,7 +344,7 @@ func (p *BlsCosi) trySign(responses Responses) error {
 	if err != nil {
 		return err
 	}
-	responses.Add(idx, own)
+	responses.Add(idx, own, p)
 	log.Lvlf4("Node %v signed", p.ServerIdentity())
 	return nil
 }

@@ -14,8 +14,8 @@ import (
 
 // Responses is the container used to store responses coming from the children
 type Responses interface {
-	Add(idx int, r *Response) error
-	Update(map[uint32](*Response)) error
+	Add(idx int, r *Response, p *BlsCosi) error
+	Update(newResponses map[uint32](*Response), p *BlsCosi) error
 	Count() int
 	// Aggregate aggregates all the signatures in responses.
 	// Also aggregates the bitmasks.
@@ -26,12 +26,12 @@ type Responses interface {
 
 type SimpleResponses map[uint32]*Response
 
-func (responses SimpleResponses) Add(idx int, response *Response) error {
+func (responses SimpleResponses) Add(idx int, response *Response, p *BlsCosi) error {
 	responses[uint32(idx)] = response
 	return nil
 }
 
-func (responses SimpleResponses) Update(newResponses map[uint32](*Response)) error {
+func (responses SimpleResponses) Update(newResponses map[uint32](*Response), p *BlsCosi) error {
 	for key, response := range newResponses {
 		responses[key] = response
 	}
@@ -139,7 +139,7 @@ func NewTreeResponses(suite pairing.Suite, publics []kyber.Point) (TreeResponses
 	}, nil
 }
 
-func (treeRes TreeResponses) Add(idx int, r *Response) error {
+func (treeRes TreeResponses) Add(idx int, r *Response, p *BlsCosi) error {
 	// It is best that we multiply each signature with its coefficient immediately
 
 	mask, err := sign.NewMask(treeRes.suite, treeRes.publics, nil)
@@ -157,10 +157,10 @@ func (treeRes TreeResponses) Add(idx int, r *Response) error {
 	if err != nil {
 		return err
 	}
-	return treeRes.addAggregated(uint32(idx), data, mask)
+	return treeRes.addAggregated(uint32(idx), data, mask, p)
 }
 
-func (treeRes TreeResponses) addAggregated(idx uint32, sig []byte, mask *sign.Mask) error {
+func (treeRes TreeResponses) addAggregated(idx uint32, sig []byte, mask *sign.Mask, p *BlsCosi) error {
 	log.Lvl5("Before:", treeRes.responses)
 	log.Lvl5("Adding to tree:", idx)
 
@@ -188,6 +188,8 @@ func (treeRes TreeResponses) addAggregated(idx uint32, sig []byte, mask *sign.Ma
 	}
 
 	var childSigs [][]byte
+	var missingChild uint32
+	countMissing := uint32(0)
 	for _, child := range children {
 		r, ok := treeRes.responses[child]
 		if ok {
@@ -195,7 +197,12 @@ func (treeRes TreeResponses) addAggregated(idx uint32, sig []byte, mask *sign.Ma
 		}
 		if !ok && child != idx {
 			aggregate = false // nothing to aggregate
-			break
+			countMissing += 1
+			missingChild = child
+
+			if countMissing > 1 {
+				break
+			}
 		}
 	}
 
@@ -216,8 +223,27 @@ func (treeRes TreeResponses) addAggregated(idx uint32, sig []byte, mask *sign.Ma
 			}
 		}
 
-		treeRes.addAggregated(parent, aggSig, mask)
+		treeRes.addAggregated(parent, aggSig, mask, p)
 	} else {
+		// If we only need 1 message to complete our aggregation
+		if countMissing == 1 {
+			// Send pull message
+			if p != nil && missingChild < uint32(treeRes.total) {
+				// Create new response map for only this node
+				responsesPull, err := p.createResponseMap()
+				if err != nil {
+					return err
+				}
+				// Add own signature.
+				err = p.trySign(responsesPull)
+				if err != nil {
+					return err
+				}
+				// Send a pull message, including this node's signature
+				p.SendTo(p.Root().Children[missingChild], &Pull{p.Params, responsesPull.Map(), p.Msg})
+			}
+		}
+
 		treeRes.responses[idx] = &Response{sig, mask.Mask()}
 		treeRes.mask.Merge(mask.Mask())
 
@@ -239,14 +265,14 @@ func (treeRes TreeResponses) addAggregated(idx uint32, sig []byte, mask *sign.Ma
 	return nil
 }
 
-func (treeRes TreeResponses) Update(newResponses map[uint32](*Response)) error {
+func (treeRes TreeResponses) Update(newResponses map[uint32](*Response), p *BlsCosi) error {
 	for k, resp := range newResponses {
 		mask, err := sign.NewMask(treeRes.suite, treeRes.publics, nil)
 		if err != nil {
 			return err
 		}
 		mask.Merge(resp.Mask)
-		err = treeRes.addAggregated(k, resp.Signature, mask)
+		err = treeRes.addAggregated(k, resp.Signature, mask, p)
 		if err != nil {
 			return err
 		}

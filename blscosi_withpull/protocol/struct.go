@@ -11,7 +11,7 @@ import (
 const DefaultProtocolName = "bundleCoSiDefault"
 
 func init() {
-	network.RegisterMessages(&Rumor{}, &Shutdown{}, &Response{}, &Stop{})
+	network.RegisterMessages(&Rumor{}, &Pull{}, &Shutdown{}, &Response{}, &Stop{})
 }
 
 // Rumor is a struct that can be sent in the gossip protocol
@@ -26,6 +26,20 @@ type Rumor struct {
 type RumorMessage struct {
 	*onet.TreeNode
 	Rumor
+}
+
+// Rumor is a struct that can be sent in the gossip protocol
+type Pull struct {
+	Params      Parameters
+	ResponseMap map[uint32](*Response)
+	Msg         []byte
+}
+
+// RumorMessage just contains a Pull request and the data necessary to identify and
+// process the message in the onet framework.
+type PullMessage struct {
+	*onet.TreeNode
+	Pull
 }
 
 // Shutdown is a struct that can be sent in the gossip protocol
