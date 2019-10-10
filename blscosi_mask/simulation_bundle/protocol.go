@@ -37,7 +37,7 @@ import (
 const roundSleep = 4 * time.Second
 
 func init() {
-	onet.SimulationRegister("BlsCosiBundleProtocol", NewSimulationProtocol)
+	onet.SimulationRegister("BlsCosiMaskProtocol", NewSimulationProtocol)
 }
 
 // SimulationProtocol implements onet.Simulation.

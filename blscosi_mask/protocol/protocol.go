@@ -134,7 +134,7 @@ func (p *BlsCosi) Dispatch() error {
 	shutdown := false
 	done := false
 
-	var rumor *Rumor
+	var rumor *RumorMessage
 
 	// The root must wait for Start() to have been called.
 	if p.IsRoot() {
@@ -149,7 +149,7 @@ func (p *BlsCosi) Dispatch() error {
 	} else {
 		select {
 		case rumorMsg := <-p.RumorsChan:
-			rumor = &rumorMsg.Rumor
+			rumor = &rumorMsg
 			p.Params = rumor.Params
 			// Copy bytes due to the way protobuf allows the bytes to be
 			// shared with the underlying buffer
@@ -172,7 +172,7 @@ func (p *BlsCosi) Dispatch() error {
 	}
 
 	// responses is a map where we collect all signatures.
-	var responses = make(SimpleResponses)
+	var responses = NewRumorResponses(make(ResponsesMap), make(BitMap))
 
 	// Add own signature.
 	err := p.trySign(responses)
@@ -181,30 +181,19 @@ func (p *BlsCosi) Dispatch() error {
 	}
 
 	if rumor != nil {
-		err = responses.Update(rumor.ResponseMap)
+		shutdown, err = handleRumor(responses, rumor, p)
 		if err != nil {
 			return err
 		}
-		log.Lvlf5("Incoming first rumor, %d known, %d needed",
-			responses.Count(), p.Threshold)
 	}
 
 	ticker := time.NewTicker(p.Params.GossipTick)
 	for !shutdown {
 		select {
 		case rumor := <-p.RumorsChan:
-			err = responses.Update(rumor.ResponseMap)
+			shutdown, err = handleRumor(responses, &rumor, p)
 			if err != nil {
 				return err
-			}
-			log.Lvlf5("Incoming rumor, %d known, %d needed, is-root %v",
-				responses.Count(), p.Threshold, p.IsRoot())
-			if p.IsRoot() && p.isEnough(responses) {
-				// We've got all the signatures.
-				//res := responses.(TreeResponses)
-				//log.Lvl5("Got all the signatures",
-				//	res.mask.CountEnabled(), res.responses, res.mask.Mask())
-				shutdown = true
 			}
 		case shutdownMsg := <-p.ShutdownChan:
 			log.Lvl5("Received shutdown")
@@ -218,7 +207,7 @@ func (p *BlsCosi) Dispatch() error {
 			}
 		case <-ticker.C:
 			log.Lvl5("Outgoing rumor")
-			p.sendRumors(responses)
+			p.sendRumors(*responses)
 		case <-protocolTimeout:
 			shutdown = true
 			done = true
@@ -276,7 +265,37 @@ func (p *BlsCosi) Dispatch() error {
 	return nil
 }
 
-func (p *BlsCosi) trySign(responses Responses) error {
+func handleRumor(responses *RumorResponses, rumor *RumorMessage, p *BlsCosi) (bool, error) {
+	if len(rumor.Rumor.Responses.responsesMap) > 0 {
+		diffBitMap, err := responses.Update(rumor.Rumor.Responses)
+		if err != nil {
+			return false, err
+		}
+		log.Lvlf5("Incoming rumor, %d known, %d needed, is-root %v",
+			len(responses.bitMap), p.Threshold, p.IsRoot())
+		if p.IsRoot() && p.isEnough(*responses) {
+			// We've got all the signatures.
+			//res := responses.(TreeResponses)
+			//log.Lvl5("Got all the signatures",
+			//	res.mask.CountEnabled(), res.responses, res.mask.Mask())
+			return true, nil
+		}
+		if len(diffBitMap) > 0 {
+			pull := NewRumorResponses(make(ResponsesMap), diffBitMap)
+			p.SendTo(rumor.TreeNode, &Rumor{p.Params, *pull, p.Msg})
+		}
+	} else {
+		pullReply, err := responses.Select(rumor.Rumor.Responses.bitMap)
+		if err != nil {
+			return false, err
+		}
+		p.SendTo(rumor.TreeNode, &Rumor{p.Params, *pullReply, p.Msg})
+	}
+
+	return false, nil
+}
+
+func (p *BlsCosi) trySign(responses *RumorResponses) error {
 	if !p.verificationFn(p.Msg, p.Data) {
 		log.Lvlf4("Node %v refused to sign", p.ServerIdentity())
 		return nil
@@ -291,7 +310,7 @@ func (p *BlsCosi) trySign(responses Responses) error {
 }
 
 // sendRumors sends a rumor message to some peers.
-func (p *BlsCosi) sendRumors(responses Responses) {
+func (p *BlsCosi) sendRumors(responses RumorResponses) {
 	targets, err := p.getRandomPeers(p.Params.RumorPeers)
 	if err != nil {
 		log.Lvl1("Couldn't get random peers:", err)
@@ -304,8 +323,8 @@ func (p *BlsCosi) sendRumors(responses Responses) {
 }
 
 // sendRumor sends the given signatures to a random peer.
-func (p *BlsCosi) sendRumor(target *onet.TreeNode, responses Responses) {
-	p.SendTo(target, &Rumor{p.Params, responses.Map(), p.Msg})
+func (p *BlsCosi) sendRumor(target *onet.TreeNode, responses RumorResponses) {
+	p.SendTo(target, &Rumor{p.Params, responses, p.Msg})
 }
 
 // sendShutdowns sends a shutdown message to some random peers.
@@ -360,8 +379,8 @@ func verify(suite pairing.Suite, sig []byte, msg []byte, public kyber.Point) err
 }
 
 // isEnough returns true if we have enough responses.
-func (p *BlsCosi) isEnough(responses Responses) bool {
-	return responses.Count() >= p.Threshold
+func (p *BlsCosi) isEnough(responses RumorResponses) bool {
+	return len(responses.bitMap) >= p.Threshold
 }
 
 // getRandomPeers returns a slice of random peers (not including self).

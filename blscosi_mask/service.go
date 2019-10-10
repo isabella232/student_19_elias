@@ -22,7 +22,7 @@ var suite = suites.MustFind("bn256.adapter").(*pairing.SuiteBn256)
 var ServiceID onet.ServiceID
 
 // ServiceName is the name to refer to the CoSi service
-const ServiceName = "bundleCoSiService"
+const ServiceName = "maskCoSiService"
 
 func init() {
 	ServiceID, _ = onet.RegisterNewServiceWithSuite(ServiceName, suite, newCoSiService)
