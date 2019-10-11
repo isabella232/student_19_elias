@@ -31,23 +31,23 @@ func (responses RumorResponses) Add(idx int, response *Response) error {
 	return nil
 }
 
-func (responses RumorResponses) Update(newResponses RumorResponses) (BitMap, error) {
-	for key, response := range newResponses.responsesMap {
+func (responses RumorResponses) Update(newResponsesMap ResponsesMap, newBitMap BitMap) (BitMap, error) {
+	for key, response := range newResponsesMap {
 		responses.responsesMap[key] = response
 		responses.bitMap[key] = true
 	}
 
 	for key, _ := range responses.bitMap {
-		_, ok := newResponses.bitMap[key]
+		_, ok := newBitMap[key]
 		if ok {
-			delete(newResponses.bitMap, key)
+			delete(newBitMap, key)
 		}
 	}
 
-	return newResponses.bitMap, nil
+	return newBitMap, nil
 }
 
-func (responses RumorResponses) Select(bitMapFilter BitMap) (*RumorResponses, error) {
+func (responses RumorResponses) SelectByBitmap(bitMapFilter BitMap) (*RumorResponses, error) {
 	selectedResponses := NewRumorResponses(make(ResponsesMap), make(BitMap))
 	for key := range bitMapFilter {
 		response, ok := responses.responsesMap[key]
@@ -58,6 +58,13 @@ func (responses RumorResponses) Select(bitMapFilter BitMap) (*RumorResponses, er
 	}
 
 	return selectedResponses, nil
+}
+
+func (responses RumorResponses) OwnSignatureWithMap(ownId uint32) *RumorResponses {
+	ownSignature := NewRumorResponses(make(ResponsesMap), responses.bitMap)
+	ownSignature.responsesMap[ownId] = responses.responsesMap[ownId]
+
+	return ownSignature
 }
 
 func (responses RumorResponses) Aggregate(suite pairing.Suite, publics []kyber.Point) (

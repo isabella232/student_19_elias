@@ -17,7 +17,8 @@ func init() {
 // Rumor is a struct that can be sent in the gossip protocol
 type Rumor struct {
 	Params    Parameters
-	Responses RumorResponses
+	Responses ResponsesMap
+	BitMap    BitMap
 	Msg       []byte
 }
 

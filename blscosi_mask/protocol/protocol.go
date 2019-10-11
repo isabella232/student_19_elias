@@ -135,6 +135,7 @@ func (p *BlsCosi) Dispatch() error {
 	done := false
 
 	var rumor *RumorMessage
+	var ownId uint32
 
 	// The root must wait for Start() to have been called.
 	if p.IsRoot() {
@@ -175,7 +176,7 @@ func (p *BlsCosi) Dispatch() error {
 	var responses = NewRumorResponses(make(ResponsesMap), make(BitMap))
 
 	// Add own signature.
-	err := p.trySign(responses)
+	ownId, err := p.trySign(responses)
 	if err != nil {
 		return err
 	}
@@ -207,7 +208,7 @@ func (p *BlsCosi) Dispatch() error {
 			}
 		case <-ticker.C:
 			log.Lvl5("Outgoing rumor")
-			p.sendRumors(*responses)
+			p.sendRumors(*responses, ownId)
 		case <-protocolTimeout:
 			shutdown = true
 			done = true
@@ -266,8 +267,8 @@ func (p *BlsCosi) Dispatch() error {
 }
 
 func handleRumor(responses *RumorResponses, rumor *RumorMessage, p *BlsCosi) (bool, error) {
-	if len(rumor.Rumor.Responses.responsesMap) > 0 {
-		diffBitMap, err := responses.Update(rumor.Rumor.Responses)
+	if len(rumor.Rumor.Responses) > 0 {
+		diffBitMap, err := responses.Update(rumor.Rumor.Responses, rumor.Rumor.BitMap)
 		if err != nil {
 			return false, err
 		}
@@ -281,50 +282,52 @@ func handleRumor(responses *RumorResponses, rumor *RumorMessage, p *BlsCosi) (bo
 			return true, nil
 		}
 		if len(diffBitMap) > 0 {
-			pull := NewRumorResponses(make(ResponsesMap), diffBitMap)
-			p.SendTo(rumor.TreeNode, &Rumor{p.Params, *pull, p.Msg})
+			p.SendTo(rumor.TreeNode, &Rumor{p.Params, make(ResponsesMap),
+				diffBitMap, p.Msg})
 		}
 	} else {
-		pullReply, err := responses.Select(rumor.Rumor.Responses.bitMap)
+		pullReply, err := responses.SelectByBitmap(rumor.Rumor.BitMap)
 		if err != nil {
 			return false, err
 		}
-		p.SendTo(rumor.TreeNode, &Rumor{p.Params, *pullReply, p.Msg})
+		p.SendTo(rumor.TreeNode, &Rumor{p.Params, pullReply.responsesMap,
+			pullReply.bitMap, p.Msg})
 	}
 
 	return false, nil
 }
 
-func (p *BlsCosi) trySign(responses *RumorResponses) error {
+func (p *BlsCosi) trySign(responses *RumorResponses) (uint32, error) {
 	if !p.verificationFn(p.Msg, p.Data) {
 		log.Lvlf4("Node %v refused to sign", p.ServerIdentity())
-		return nil
+		return 0, nil
 	}
 	own, idx, err := p.makeResponse()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	responses.Add(idx, own)
 	log.Lvlf4("Node %v signed", p.ServerIdentity())
-	return nil
+	return uint32(idx), nil
 }
 
 // sendRumors sends a rumor message to some peers.
-func (p *BlsCosi) sendRumors(responses RumorResponses) {
+func (p *BlsCosi) sendRumors(responses RumorResponses, ownId uint32) {
 	targets, err := p.getRandomPeers(p.Params.RumorPeers)
 	if err != nil {
 		log.Lvl1("Couldn't get random peers:", err)
 		return
 	}
+	ownSignatureOnly := responses.OwnSignatureWithMap(ownId)
 	log.Lvl5("Sending rumors")
 	for _, target := range targets {
-		p.sendRumor(target, responses)
+		p.sendRumor(target, *ownSignatureOnly)
 	}
 }
 
 // sendRumor sends the given signatures to a random peer.
 func (p *BlsCosi) sendRumor(target *onet.TreeNode, responses RumorResponses) {
-	p.SendTo(target, &Rumor{p.Params, responses, p.Msg})
+	p.SendTo(target, &Rumor{p.Params, responses.responsesMap, responses.bitMap, p.Msg})
 }
 
 // sendShutdowns sends a shutdown message to some random peers.
