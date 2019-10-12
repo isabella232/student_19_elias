@@ -30,10 +30,10 @@ func init() {
 	GlobalRegisterDefaultProtocols()
 }
 
-// BlsCosi holds the parameters of the protocol.
+// BlsCosiMask holds the parameters of the protocol.
 // It also defines a channel that will receive the final signature.
 // This protocol exists on all nodes.
-type BlsCosi struct {
+type BlsCosiMask struct {
 	*onet.TreeNodeInstance
 	Msg  []byte
 	Data []byte
@@ -50,8 +50,9 @@ type BlsCosi struct {
 	Params         Parameters // mainly for simulations
 
 	// internodes channels
-	RumorsChan   chan RumorMessage
-	ShutdownChan chan ShutdownMessage
+	RumorsChan           chan RumorMessage
+	SignatureRequestChan chan SignatureRequestMessage
+	ShutdownChan         chan ShutdownMessage
 }
 
 // NewDefaultProtocol is the default protocol function used for registration
@@ -59,7 +60,7 @@ type BlsCosi struct {
 // Called by GlobalRegisterDefaultProtocols
 func NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolInstance, error) {
 	vf := func(a, b []byte) bool { return true }
-	return NewBlsCosi(n, vf, pairing.NewSuiteBn256())
+	return NewBlsCosiMask(n, vf, pairing.NewSuiteBn256())
 }
 
 // GlobalRegisterDefaultProtocols is used to register the protocols before use,
@@ -75,10 +76,10 @@ func DefaultThreshold(n int) int {
 	return n - f
 }
 
-// NewBlsCosi method is used to define the blscosi protocol.
-func NewBlsCosi(n *onet.TreeNodeInstance, vf VerificationFn, suite *pairing.SuiteBn256) (onet.ProtocolInstance, error) {
+// NewBlsCosiMask method is used to define the blscosi protocol.
+func NewBlsCosiMask(n *onet.TreeNodeInstance, vf VerificationFn, suite *pairing.SuiteBn256) (onet.ProtocolInstance, error) {
 	nNodes := len(n.Roster().List)
-	c := &BlsCosi{
+	c := &BlsCosiMask{
 		TreeNodeInstance: n,
 		FinalSignature:   make(chan BlsSignature, 1),
 		Timeout:          defaultTimeout,
@@ -88,7 +89,7 @@ func NewBlsCosi(n *onet.TreeNodeInstance, vf VerificationFn, suite *pairing.Suit
 		suite:            suite,
 	}
 
-	err := c.RegisterChannels(&c.RumorsChan, &c.ShutdownChan)
+	err := c.RegisterChannels(&c.RumorsChan, &c.SignatureRequestChan, &c.ShutdownChan)
 	if err != nil {
 		return nil, errors.New("couldn't register channels: " + err.Error())
 	}
@@ -97,7 +98,7 @@ func NewBlsCosi(n *onet.TreeNodeInstance, vf VerificationFn, suite *pairing.Suit
 }
 
 // Shutdown stops the protocol
-func (p *BlsCosi) Shutdown() error {
+func (p *BlsCosiMask) Shutdown() error {
 	p.stoppedOnce.Do(func() {
 		close(p.startChan)
 		close(p.FinalSignature)
@@ -107,20 +108,20 @@ func (p *BlsCosi) Shutdown() error {
 
 // Start is done only by root and starts the protocol.
 // It also verifies that the protocol has been correctly parameterized.
-func (p *BlsCosi) Start() error {
+func (p *BlsCosiMask) Start() error {
 	err := p.checkIntegrity()
 	if err != nil {
 		p.Done()
 		return err
 	}
 
-	log.Lvlf3("Starting BLS CoSi on %v", p.ServerIdentity())
+	log.Lvlf3("Starting BLS Mask on %v", p.ServerIdentity())
 	p.startChan <- true
 	return nil
 }
 
 // Dispatch is the main method of the protocol for all nodes.
-func (p *BlsCosi) Dispatch() error {
+func (p *BlsCosiMask) Dispatch() error {
 	defer p.Done()
 
 	protocolTimeout := time.After(shutdownAfter)
@@ -196,6 +197,11 @@ func (p *BlsCosi) Dispatch() error {
 			if err != nil {
 				return err
 			}
+		case signatureRequest := <-p.SignatureRequestChan:
+			shutdown, err = handleSignatureRequest(responses, &signatureRequest, p)
+			if err != nil {
+				return err
+			}
 		case shutdownMsg := <-p.ShutdownChan:
 			log.Lvl5("Received shutdown")
 			if err := p.verifyShutdown(shutdownMsg); err == nil {
@@ -266,38 +272,51 @@ func (p *BlsCosi) Dispatch() error {
 	return nil
 }
 
-func handleRumor(responses *RumorResponses, rumor *RumorMessage, p *BlsCosi) (bool, error) {
-	if len(rumor.Rumor.Responses) > 0 {
-		diffBitMap, err := responses.Update(rumor.Rumor.Responses, rumor.Rumor.BitMap)
-		if err != nil {
-			return false, err
-		}
-		log.Lvlf5("Incoming rumor, %d known, %d needed, is-root %v",
-			len(responses.bitMap), p.Threshold, p.IsRoot())
-		if p.IsRoot() && p.isEnough(*responses) {
-			// We've got all the signatures.
-			//res := responses.(TreeResponses)
-			//log.Lvl5("Got all the signatures",
-			//	res.mask.CountEnabled(), res.responses, res.mask.Mask())
-			return true, nil
-		}
-		if len(diffBitMap) > 0 {
-			p.SendTo(rumor.TreeNode, &Rumor{p.Params, make(ResponsesMap),
-				diffBitMap, p.Msg})
-		}
-	} else {
-		pullReply, err := responses.SelectByBitmap(rumor.Rumor.BitMap)
-		if err != nil {
-			return false, err
-		}
-		p.SendTo(rumor.TreeNode, &Rumor{p.Params, pullReply.responsesMap,
-			pullReply.bitMap, p.Msg})
+func handleRumor(responses *RumorResponses, rumor *RumorMessage, p *BlsCosiMask) (bool, error) {
+	diffBitMap, err := responses.Update(rumor.Rumor.Responses, rumor.Rumor.BitMap)
+	if err != nil {
+		return false, err
+	}
+	log.Lvlf5("Incoming rumor, %d known, %d needed, is-root %v", len(responses.bitMap), p.Threshold, p.IsRoot())
+	if p.IsRoot() && p.isEnough(*responses) {
+		// We've got enough signatures.
+		return true, nil
+	}
+	if len(diffBitMap) > 0 {
+		p.sendSignatureRequest(rumor.TreeNode, make(ResponsesMap), diffBitMap)
 	}
 
 	return false, nil
 }
 
-func (p *BlsCosi) trySign(responses *RumorResponses) (uint32, error) {
+func handleSignatureRequest(responses *RumorResponses, signatureReq *SignatureRequestMessage, p *BlsCosiMask) (bool, error) {
+	if len(signatureReq.SignatureRequest.Responses) > 0 {
+		diffBitMap, err :=
+			responses.Update(signatureReq.SignatureRequest.Responses, signatureReq.SignatureRequest.BitMap)
+		if err != nil {
+			return false, err
+		}
+		log.Lvlf5("Incoming response to signature request, %d known, %d needed, is-root %v",
+			len(responses.bitMap), p.Threshold, p.IsRoot())
+		if p.IsRoot() && p.isEnough(*responses) {
+			// We've got enough signatures.
+			return true, nil
+		}
+		if len(diffBitMap) > 0 {
+			p.sendSignatureRequest(signatureReq.TreeNode, make(ResponsesMap), diffBitMap)
+		}
+	} else {
+		pullReply, err := responses.SelectByBitmap(signatureReq.SignatureRequest.BitMap)
+		if err != nil {
+			return false, err
+		}
+		p.sendSignatureRequest(signatureReq.TreeNode, pullReply.responsesMap, pullReply.bitMap)
+	}
+
+	return false, nil
+}
+
+func (p *BlsCosiMask) trySign(responses *RumorResponses) (uint32, error) {
 	if !p.verificationFn(p.Msg, p.Data) {
 		log.Lvlf4("Node %v refused to sign", p.ServerIdentity())
 		return 0, nil
@@ -311,8 +330,8 @@ func (p *BlsCosi) trySign(responses *RumorResponses) (uint32, error) {
 	return uint32(idx), nil
 }
 
-// sendRumors sends a rumor message to some peers.
-func (p *BlsCosi) sendRumors(responses RumorResponses, ownId uint32) {
+// sendRumors sends a rumor message to some random peers.
+func (p *BlsCosiMask) sendRumors(responses RumorResponses, ownId uint32) {
 	targets, err := p.getRandomPeers(p.Params.RumorPeers)
 	if err != nil {
 		log.Lvl1("Couldn't get random peers:", err)
@@ -325,13 +344,18 @@ func (p *BlsCosi) sendRumors(responses RumorResponses, ownId uint32) {
 	}
 }
 
-// sendRumor sends the given signatures to a random peer.
-func (p *BlsCosi) sendRumor(target *onet.TreeNode, responses RumorResponses) {
+// sendRumor sends the given signatures to a peer.
+func (p *BlsCosiMask) sendRumor(target *onet.TreeNode, responses RumorResponses) {
 	p.SendTo(target, &Rumor{p.Params, responses.responsesMap, responses.bitMap, p.Msg})
 }
 
+// sendSignatureRequest sends a signature request message to a peer.
+func (p *BlsCosiMask) sendSignatureRequest(target *onet.TreeNode, responsesMap ResponsesMap, bitMap BitMap) {
+	p.SendTo(target, &SignatureRequest{responsesMap, bitMap})
+}
+
 // sendShutdowns sends a shutdown message to some random peers.
-func (p *BlsCosi) sendShutdowns(shutdown Shutdown) {
+func (p *BlsCosiMask) sendShutdowns(shutdown Shutdown) {
 	targets, err := p.getRandomPeers(p.Params.ShutdownPeers)
 	if err != nil {
 		log.Lvl1("Couldn't get random peers for shutdown:", err)
@@ -344,12 +368,12 @@ func (p *BlsCosi) sendShutdowns(shutdown Shutdown) {
 }
 
 // sendShutdown sends a shutdown message to a single peer.
-func (p *BlsCosi) sendShutdown(target *onet.TreeNode, shutdown Shutdown) {
+func (p *BlsCosiMask) sendShutdown(target *onet.TreeNode, shutdown Shutdown) {
 	p.SendTo(target, &shutdown)
 }
 
 // verifyShutdown verifies the legitimacy of a shutdown message.
-func (p *BlsCosi) verifyShutdown(msg ShutdownMessage) error {
+func (p *BlsCosiMask) verifyShutdown(msg ShutdownMessage) error {
 	if len(p.Publics()) == 0 {
 		return errors.New("Roster is empty")
 	}
@@ -382,12 +406,12 @@ func verify(suite pairing.Suite, sig []byte, msg []byte, public kyber.Point) err
 }
 
 // isEnough returns true if we have enough responses.
-func (p *BlsCosi) isEnough(responses RumorResponses) bool {
+func (p *BlsCosiMask) isEnough(responses RumorResponses) bool {
 	return len(responses.bitMap) >= p.Threshold
 }
 
 // getRandomPeers returns a slice of random peers (not including self).
-func (p *BlsCosi) getRandomPeers(numTargets int) ([]*onet.TreeNode, error) {
+func (p *BlsCosiMask) getRandomPeers(numTargets int) ([]*onet.TreeNode, error) {
 	self := p.TreeNode()
 	root := p.Root()
 	allNodes := append(root.Children, root)
@@ -430,7 +454,7 @@ func (p *BlsCosi) getRandomPeers(numTargets int) ([]*onet.TreeNode, error) {
 
 // checkIntegrity checks if the protocol has been instantiated with
 // correct parameters
-func (p *BlsCosi) checkIntegrity() error {
+func (p *BlsCosiMask) checkIntegrity() error {
 	if p.Msg == nil {
 		return fmt.Errorf("no proposal msg specified")
 	}
@@ -455,13 +479,13 @@ func (p *BlsCosi) checkIntegrity() error {
 
 // checkFailureThreshold returns true when the number of failures
 // is above the threshold
-func (p *BlsCosi) checkFailureThreshold(numFailure int) bool {
+func (p *BlsCosiMask) checkFailureThreshold(numFailure int) bool {
 	return numFailure > len(p.Roster().List)-p.Threshold
 }
 
 // Sign the message and pack it with the mask as a response
 // idx is this node's index
-func (p *BlsCosi) makeResponse() (*Response, int, error) {
+func (p *BlsCosiMask) makeResponse() (*Response, int, error) {
 	mask, err := sign.NewMask(p.suite, p.Publics(), p.Public())
 	log.Lvl2("signing with", p.Public())
 	if err != nil {

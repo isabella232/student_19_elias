@@ -11,7 +11,7 @@ import (
 const DefaultProtocolName = "maskCoSiDefault"
 
 func init() {
-	network.RegisterMessages(&Rumor{}, &Shutdown{}, &Response{})
+	network.RegisterMessages(&Rumor{}, &SignatureRequest{}, &Shutdown{})
 }
 
 // Rumor is a struct that can be sent in the gossip protocol
@@ -27,6 +27,19 @@ type Rumor struct {
 type RumorMessage struct {
 	*onet.TreeNode
 	Rumor
+}
+
+// SignatureRequest is a struct that can be sent in the gossip protocol
+type SignatureRequest struct {
+	Responses ResponsesMap
+	BitMap    BitMap
+}
+
+// SignatureRequestMessage contains a SignatureRequest and the data necessary to identify and
+// process the message in the onet framework.
+type SignatureRequestMessage struct {
+	*onet.TreeNode
+	SignatureRequest
 }
 
 // Shutdown is a struct that can be sent in the gossip protocol

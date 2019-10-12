@@ -63,12 +63,12 @@ func (s *Service) SignatureRequest(req *SignatureRequest) (network.Message, erro
 		return nil, errors.New("failed to generate tree")
 	}
 
-	// configure the BlsCosi protocol
+	// configure the BlsCosiMask protocol
 	pi, err := s.CreateProtocol(protocol.DefaultProtocolName, tree)
 	if err != nil {
 		return nil, errors.New("Couldn't make new protocol: " + err.Error())
 	}
-	p := pi.(*protocol.BlsCosi)
+	p := pi.(*protocol.BlsCosiMask)
 	p.Timeout = s.Timeout
 	p.Msg = req.Message
 	p.Params = req.Params
