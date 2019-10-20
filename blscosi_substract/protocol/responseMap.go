@@ -37,7 +37,7 @@ func (responses RumorResponses) Update(newResponsesMap ResponsesMap, newBitMap B
 		responses.bitMap[key] = true
 	}
 
-	for key, _ := range responses.bitMap {
+	for key := range responses.bitMap {
 		_, ok := newBitMap[key]
 		if ok {
 			delete(newBitMap, key)
@@ -67,13 +67,6 @@ func (responses RumorResponses) SelectById(idx uint32) *Response {
 	}
 
 	return nil
-}
-
-func (responses RumorResponses) OwnSignatureWithMap(ownId uint32) *RumorResponses {
-	ownSignature := NewRumorResponses(make(ResponsesMap), responses.bitMap)
-	ownSignature.responsesMap[ownId] = responses.responsesMap[ownId]
-
-	return ownSignature
 }
 
 func (responses RumorResponses) Aggregate(suite pairing.Suite, publics []kyber.Point) (

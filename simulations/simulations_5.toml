@@ -1,4 +1,4 @@
-Simulation = "BlsCosiBundleProtocol"
+Simulation = "BlsCosiMaskProtocol"
 Servers = 1
 Bf = 200
 Rounds = 15

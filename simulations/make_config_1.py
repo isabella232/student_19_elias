@@ -62,8 +62,8 @@ def print_toml(filename, protocol, new=False):
 
 
 def main():
-    print_toml(CONFIG_PATH_REF, 'BlsCosiBundleProtocol')
-    print_toml(CONFIG_PATH_NEW, 'BlsCosiMaskProtocol', new=True)
+    print_toml(CONFIG_PATH_REF, 'BlsCosiProtocol')
+    print_toml(CONFIG_PATH_NEW, 'BlsCosiBundleProtocol', new=True)
 
 
 if __name__ == '__main__':
