@@ -520,6 +520,7 @@ func isSingleSignature(rumor RumorMessage) (bool, uint32) {
 }
 
 func aggregateSignatures(p *BlsCosiSubstract, response1 Response, response2 Response) (*Response, error) {
+	// FIRST TRY USING BLS
 	mask, err := sign.NewMask(p.suite, p.Publics(), nil)
 	if err != nil {
 		return nil, err
@@ -533,6 +534,38 @@ func aggregateSignatures(p *BlsCosiSubstract, response1 Response, response2 Resp
 	}
 
 	return &Response{sig, mask.Mask()}, nil
+
+	// SECOND TRY USING BDN
+	//mask, err := sign.NewMask(p.suite, p.Publics(), nil)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//mask.Merge(response1.Mask)
+	//mask.Merge(response2.Mask)
+	//
+	//finalPoint := p.suite.G1().Point()
+	//err = finalPoint.UnmarshalBinary(response1.Signature)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//
+	//secondPoint := p.suite.G1().Point()
+	//err = secondPoint.UnmarshalBinary(response2.Signature)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//var sigs [][]byte
+	//sigs = append(sigs, response1.Signature)
+	//sigs = append(sigs, response2.Signature)
+	//
+	//aggSig, err := bdn.AggregateSignatures(p.suite, sigs, mask)
+	//
+	//data, err := aggSig.MarshalBinary()
+	//if err != nil {
+	//	return nil, err
+	//}
+	//
+	//return &Response{data, mask.Mask()}, nil
 }
 
 func addToResponseOrPull(response *Response, collectedSignatures *RumorResponses, pullingResponses []*Response, pullingCollisionMasks [][]byte, rumor RumorMessage, p *BlsCosiSubstract) bool {
