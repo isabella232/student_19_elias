@@ -5,7 +5,6 @@ package protocol
 import (
 	"errors"
 	"fmt"
-	"go.dedis.ch/kyber/v3/sign/bls"
 	"math/rand"
 	"sync"
 	"time"
@@ -31,10 +30,10 @@ func init() {
 	GlobalRegisterDefaultProtocols()
 }
 
-// BlsCosiSubstract holds the parameters of the protocol.
+// BlsCosiMaskAggr holds the parameters of the protocol.
 // It also defines a channel that will receive the final signature.
 // This protocol exists on all nodes.
-type BlsCosiSubstract struct {
+type BlsCosiMaskAggr struct {
 	*onet.TreeNodeInstance
 	Msg  []byte
 	Data []byte
@@ -61,7 +60,7 @@ type BlsCosiSubstract struct {
 // Called by GlobalRegisterDefaultProtocols
 func NewDefaultProtocol(n *onet.TreeNodeInstance) (onet.ProtocolInstance, error) {
 	vf := func(a, b []byte) bool { return true }
-	return NewBlsCosiSubstract(n, vf, pairing.NewSuiteBn256())
+	return NewBlsCosiMaskAggr(n, vf, pairing.NewSuiteBn256())
 }
 
 // GlobalRegisterDefaultProtocols is used to register the protocols before use,
@@ -77,10 +76,10 @@ func DefaultThreshold(n int) int {
 	return n - f
 }
 
-// NewBlsCosiSubstract method is used to define the blscosi protocol.
-func NewBlsCosiSubstract(n *onet.TreeNodeInstance, vf VerificationFn, suite *pairing.SuiteBn256) (onet.ProtocolInstance, error) {
+// NewBlsCosiMaskAggr method is used to define the blscosi protocol.
+func NewBlsCosiMaskAggr(n *onet.TreeNodeInstance, vf VerificationFn, suite *pairing.SuiteBn256) (onet.ProtocolInstance, error) {
 	nNodes := len(n.Roster().List)
-	c := &BlsCosiSubstract{
+	c := &BlsCosiMaskAggr{
 		TreeNodeInstance: n,
 		FinalSignature:   make(chan BlsSignature, 1),
 		Timeout:          defaultTimeout,
@@ -99,7 +98,7 @@ func NewBlsCosiSubstract(n *onet.TreeNodeInstance, vf VerificationFn, suite *pai
 }
 
 // Shutdown stops the protocol
-func (p *BlsCosiSubstract) Shutdown() error {
+func (p *BlsCosiMaskAggr) Shutdown() error {
 	p.stoppedOnce.Do(func() {
 		close(p.startChan)
 		close(p.FinalSignature)
@@ -109,7 +108,7 @@ func (p *BlsCosiSubstract) Shutdown() error {
 
 // Start is done only by root and starts the protocol.
 // It also verifies that the protocol has been correctly parameterized.
-func (p *BlsCosiSubstract) Start() error {
+func (p *BlsCosiMaskAggr) Start() error {
 	err := p.checkIntegrity()
 	if err != nil {
 		p.Done()
@@ -122,7 +121,7 @@ func (p *BlsCosiSubstract) Start() error {
 }
 
 // Dispatch is the main method of the protocol for all nodes.
-func (p *BlsCosiSubstract) Dispatch() error {
+func (p *BlsCosiMaskAggr) Dispatch() error {
 	defer p.Done()
 
 	protocolTimeout := time.After(shutdownAfter)
@@ -174,20 +173,17 @@ func (p *BlsCosiSubstract) Dispatch() error {
 		}
 	}
 
-	// responses is where we collect all signatures.
-	var response *Response
-	collectedSignatures := NewRumorResponses(make(ResponsesMap), make(BitMap))
-	pullingResponses := make([]*Response, 0)
-	pullingCollisionMasks := make([][]byte, 0)
+	// responses is a map where we collect all signatures.
+	var responses = NewRumorResponses(make(ResponsesMap), make(BitMap))
 
 	// Add own signature.
-	ownId, err := p.trySign(response, collectedSignatures)
-	if err != nil || response == nil {
+	ownId, err := p.trySign(responses)
+	if err != nil {
 		return err
 	}
 
 	if rumor != nil {
-		shutdown, err = handleRumor(response, collectedSignatures, pullingResponses, pullingCollisionMasks, rumor, p)
+		shutdown, err = handleRumor(responses, rumor, p)
 		if err != nil {
 			return err
 		}
@@ -197,12 +193,15 @@ func (p *BlsCosiSubstract) Dispatch() error {
 	for !shutdown {
 		select {
 		case rumor := <-p.RumorsChan:
-			shutdown, err = handleRumor(response, collectedSignatures, pullingResponses, pullingCollisionMasks, &rumor, p)
+			shutdown, err = handleRumor(responses, &rumor, p)
 			if err != nil {
 				return err
 			}
 		case signatureRequest := <-p.SignatureRequestChan:
-			handleSignatureRequest(collectedSignatures, &signatureRequest, p)
+			shutdown, err = handleSignatureRequest(responses, &signatureRequest, p)
+			if err != nil {
+				return err
+			}
 		case shutdownMsg := <-p.ShutdownChan:
 			log.Lvl5("Received shutdown")
 			if err := p.verifyShutdown(shutdownMsg); err == nil {
@@ -215,7 +214,7 @@ func (p *BlsCosiSubstract) Dispatch() error {
 			}
 		case <-ticker.C:
 			log.Lvl5("Outgoing rumor")
-			p.sendRumors(*collectedSignatures, ownId)
+			p.sendRumors(*responses, ownId)
 		case <-protocolTimeout:
 			shutdown = true
 			done = true
@@ -229,14 +228,18 @@ func (p *BlsCosiSubstract) Dispatch() error {
 
 		log.Lvlf3("%v is aggregating signatures", p.ServerIdentity())
 		// generate root signature
-		finalMask, err := sign.NewMask(p.suite, p.Publics(), nil)
+		signaturePoint, finalMask, err := responses.Aggregate(p.suite, p.Publics())
 		if err != nil {
 			return err
 		}
-		finalMask.Merge(response.Mask)
 
-		finalSig := append(response.Signature, finalMask.Mask()...)
-		log.Lvlf3("%v created final signature %x with mask %b", p.ServerIdentity(), response.Signature, finalMask.Mask())
+		signature, err := signaturePoint.MarshalBinary()
+		if err != nil {
+			return err
+		}
+
+		finalSig := append(signature, finalMask.Mask()...)
+		log.Lvlf3("%v created final signature %x with mask %b", p.ServerIdentity(), signature, finalMask.Mask())
 		p.FinalSignature <- finalSig
 
 		// Sign shutdown message
@@ -269,28 +272,51 @@ func (p *BlsCosiSubstract) Dispatch() error {
 	return nil
 }
 
-func handleRumor(response *Response, collectedSignatures *RumorResponses, pullingResponses []*Response, pullingCollisionMasks [][]byte, rumor *RumorMessage, p *BlsCosiSubstract) (bool, error) {
-	isSingle, idx := isSingleSignature(*rumor)
-	if isSingle && collectedSignatures.SelectById(idx) == nil {
-		collectedSignatures.Add(int(idx), rumor.Rumor.Response)
+func handleRumor(responses *RumorResponses, rumor *RumorMessage, p *BlsCosiMaskAggr) (bool, error) {
+	diffBitMap, err := responses.Update(rumor.Rumor.Responses, rumor.Rumor.BitMap)
+	if err != nil {
+		return false, err
 	}
-	added := addToResponseOrPull(response, collectedSignatures, pullingResponses, pullingCollisionMasks, *rumor, p)
-	if added {
-		if p.IsRoot() && p.isEnough(*response) {
-			return true, nil
-		}
-		return checkPullingResponses(response, collectedSignatures, pullingResponses, pullingCollisionMasks, p), nil
+	log.Lvlf5("Incoming rumor, %d known, %d needed, is-root %v", len(responses.bitMap), p.Threshold, p.IsRoot())
+	if p.IsRoot() && p.isEnough(*responses) {
+		// We've got enough signatures.
+		return true, nil
 	}
+	if len(diffBitMap) > 0 {
+		p.sendSignatureRequest(rumor.TreeNode, make(ResponsesMap), diffBitMap)
+	}
+
 	return false, nil
 }
 
-func handleSignatureRequest(collectedSignatures *RumorResponses, signatureReq *SignatureRequestMessage, p *BlsCosiSubstract) {
-	pullReply := collectedSignatures.SelectById(signatureReq.SignatureRequest.idx)
-	p.sendRumor(signatureReq.TreeNode, *pullReply)
+func handleSignatureRequest(responses *RumorResponses, signatureReq *SignatureRequestMessage, p *BlsCosiMaskAggr) (bool, error) {
+	if len(signatureReq.SignatureRequest.Responses) > 0 {
+		diffBitMap, err :=
+			responses.Update(signatureReq.SignatureRequest.Responses, signatureReq.SignatureRequest.BitMap)
+		if err != nil {
+			return false, err
+		}
+		log.Lvlf5("Incoming response to signature request, %d known, %d needed, is-root %v",
+			len(responses.bitMap), p.Threshold, p.IsRoot())
+		if p.IsRoot() && p.isEnough(*responses) {
+			// We've got enough signatures.
+			return true, nil
+		}
+		if len(diffBitMap) > 0 {
+			p.sendSignatureRequest(signatureReq.TreeNode, make(ResponsesMap), diffBitMap)
+		}
+	} else {
+		pullReply, err := responses.SelectByBitmap(signatureReq.SignatureRequest.BitMap)
+		if err != nil {
+			return false, err
+		}
+		p.sendSignatureRequest(signatureReq.TreeNode, pullReply.responsesMap, pullReply.bitMap)
+	}
+
+	return false, nil
 }
 
-func (p *BlsCosiSubstract) trySign(response *Response, collectedSignatures *RumorResponses) (uint32, error) {
-	// Create signature
+func (p *BlsCosiMaskAggr) trySign(responses *RumorResponses) (uint32, error) {
 	if !p.verificationFn(p.Msg, p.Data) {
 		log.Lvlf4("Node %v refused to sign", p.ServerIdentity())
 		return 0, nil
@@ -299,38 +325,19 @@ func (p *BlsCosiSubstract) trySign(response *Response, collectedSignatures *Rumo
 	if err != nil {
 		return 0, err
 	}
-	// Multiply signature with coefficient immediately
-	mask, err := sign.NewMask(p.suite, p.Publics(), nil)
-	if err != nil {
-		return 0, err
-	}
-	mask.Merge(own.Mask)
-	sig := [][]byte{own.Signature}
-	aggSig, err := bdn.AggregateSignatures(p.suite, sig, mask)
-	if err != nil {
-		return 0, err
-	}
-	finalSign, err := aggSig.MarshalBinary()
-	if err != nil {
-		return 0, err
-	}
-	response = &Response{
-		Signature: finalSign,
-		Mask:      mask.Mask(),
-	}
-	collectedSignatures.Add(idx, *response)
+	responses.Add(idx, own)
 	log.Lvlf4("Node %v signed", p.ServerIdentity())
 	return uint32(idx), nil
 }
 
 // sendRumors sends a rumor message to some random peers.
-func (p *BlsCosiSubstract) sendRumors(collectedSignatures RumorResponses, ownId uint32) {
+func (p *BlsCosiMaskAggr) sendRumors(responses RumorResponses, ownId uint32) {
 	targets, err := p.getRandomPeers(p.Params.RumorPeers)
 	if err != nil {
 		log.Lvl1("Couldn't get random peers:", err)
 		return
 	}
-	ownSignatureOnly := collectedSignatures.responsesMap[ownId]
+	ownSignatureOnly := responses.OwnSignatureWithMap(ownId)
 	log.Lvl5("Sending rumors")
 	for _, target := range targets {
 		p.sendRumor(target, *ownSignatureOnly)
@@ -338,17 +345,17 @@ func (p *BlsCosiSubstract) sendRumors(collectedSignatures RumorResponses, ownId 
 }
 
 // sendRumor sends the given signatures to a peer.
-func (p *BlsCosiSubstract) sendRumor(target *onet.TreeNode, response Response) {
-	p.SendTo(target, &Rumor{p.Params, response, p.Msg})
+func (p *BlsCosiMaskAggr) sendRumor(target *onet.TreeNode, responses RumorResponses) {
+	p.SendTo(target, &Rumor{p.Params, responses.responsesMap, responses.bitMap, p.Msg})
 }
 
 // sendSignatureRequest sends a signature request message to a peer.
-func (p *BlsCosiSubstract) sendSignatureRequest(target *onet.TreeNode, idx uint32) {
-	p.SendTo(target, &SignatureRequest{idx})
+func (p *BlsCosiMaskAggr) sendSignatureRequest(target *onet.TreeNode, responsesMap ResponsesMap, bitMap BitMap) {
+	p.SendTo(target, &SignatureRequest{responsesMap, bitMap})
 }
 
 // sendShutdowns sends a shutdown message to some random peers.
-func (p *BlsCosiSubstract) sendShutdowns(shutdown Shutdown) {
+func (p *BlsCosiMaskAggr) sendShutdowns(shutdown Shutdown) {
 	targets, err := p.getRandomPeers(p.Params.ShutdownPeers)
 	if err != nil {
 		log.Lvl1("Couldn't get random peers for shutdown:", err)
@@ -361,12 +368,12 @@ func (p *BlsCosiSubstract) sendShutdowns(shutdown Shutdown) {
 }
 
 // sendShutdown sends a shutdown message to a single peer.
-func (p *BlsCosiSubstract) sendShutdown(target *onet.TreeNode, shutdown Shutdown) {
+func (p *BlsCosiMaskAggr) sendShutdown(target *onet.TreeNode, shutdown Shutdown) {
 	p.SendTo(target, &shutdown)
 }
 
 // verifyShutdown verifies the legitimacy of a shutdown message.
-func (p *BlsCosiSubstract) verifyShutdown(msg ShutdownMessage) error {
+func (p *BlsCosiMaskAggr) verifyShutdown(msg ShutdownMessage) error {
 	if len(p.Publics()) == 0 {
 		return errors.New("Roster is empty")
 	}
@@ -399,18 +406,12 @@ func verify(suite pairing.Suite, sig []byte, msg []byte, public kyber.Point) err
 }
 
 // isEnough returns true if we have enough responses.
-func (p *BlsCosiSubstract) isEnough(response Response) bool {
-	count := 0
-	for _, val := range response.Mask {
-		if val == 1 {
-			count = count + 1
-		}
-	}
-	return count >= p.Threshold
+func (p *BlsCosiMaskAggr) isEnough(responses RumorResponses) bool {
+	return len(responses.bitMap) >= p.Threshold
 }
 
 // getRandomPeers returns a slice of random peers (not including self).
-func (p *BlsCosiSubstract) getRandomPeers(numTargets int) ([]*onet.TreeNode, error) {
+func (p *BlsCosiMaskAggr) getRandomPeers(numTargets int) ([]*onet.TreeNode, error) {
 	self := p.TreeNode()
 	root := p.Root()
 	allNodes := append(root.Children, root)
@@ -453,7 +454,7 @@ func (p *BlsCosiSubstract) getRandomPeers(numTargets int) ([]*onet.TreeNode, err
 
 // checkIntegrity checks if the protocol has been instantiated with
 // correct parameters
-func (p *BlsCosiSubstract) checkIntegrity() error {
+func (p *BlsCosiMaskAggr) checkIntegrity() error {
 	if p.Msg == nil {
 		return fmt.Errorf("no proposal msg specified")
 	}
@@ -478,13 +479,13 @@ func (p *BlsCosiSubstract) checkIntegrity() error {
 
 // checkFailureThreshold returns true when the number of failures
 // is above the threshold
-func (p *BlsCosiSubstract) checkFailureThreshold(numFailure int) bool {
+func (p *BlsCosiMaskAggr) checkFailureThreshold(numFailure int) bool {
 	return numFailure > len(p.Roster().List)-p.Threshold
 }
 
 // Sign the message and pack it with the mask as a response
 // idx is this node's index
-func (p *BlsCosiSubstract) makeResponse() (*Response, int, error) {
+func (p *BlsCosiMaskAggr) makeResponse() (*Response, int, error) {
 	mask, err := sign.NewMask(p.suite, p.Publics(), p.Public())
 	log.Lvl2("signing with", p.Public())
 	if err != nil {
@@ -505,189 +506,4 @@ func (p *BlsCosiSubstract) makeResponse() (*Response, int, error) {
 		Mask:      mask.Mask(),
 		Signature: sig,
 	}, idx, nil
-}
-
-func isSingleSignature(rumor RumorMessage) (bool, uint32) {
-	var idSignature uint32
-	countSignatures := 0
-	for i, item := range rumor.Rumor.Response.Mask {
-		if item == 1 {
-			countSignatures++
-			idSignature = uint32(i)
-		}
-	}
-	return countSignatures == 1, idSignature
-}
-
-func aggregateSignatures(p *BlsCosiSubstract, response1 Response, response2 Response) (*Response, error) {
-	// FIRST TRY USING BLS
-	mask, err := sign.NewMask(p.suite, p.Publics(), nil)
-	if err != nil {
-		return nil, err
-	}
-	mask.Merge(response1.Mask)
-	mask.Merge(response2.Mask)
-
-	sig, err := bls.AggregateSignatures(p.suite, response1.Signature, response2.Signature)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Response{sig, mask.Mask()}, nil
-
-	// SECOND TRY USING BDN
-	//mask, err := sign.NewMask(p.suite, p.Publics(), nil)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//mask.Merge(response1.Mask)
-	//mask.Merge(response2.Mask)
-	//
-	//finalPoint := p.suite.G1().Point()
-	//err = finalPoint.UnmarshalBinary(response1.Signature)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//secondPoint := p.suite.G1().Point()
-	//err = secondPoint.UnmarshalBinary(response2.Signature)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//var sigs [][]byte
-	//sigs = append(sigs, response1.Signature)
-	//sigs = append(sigs, response2.Signature)
-	//
-	//aggSig, err := bdn.AggregateSignatures(p.suite, sigs, mask)
-	//
-	//data, err := aggSig.MarshalBinary()
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//return &Response{data, mask.Mask()}, nil
-}
-
-func addToResponseOrPull(response *Response, collectedSignatures *RumorResponses, pullingResponses []*Response, pullingCollisionMasks [][]byte, rumor RumorMessage, p *BlsCosiSubstract) bool {
-	collision, newValues := masksCollision(rumor.Rumor.Response.Mask, response.Mask)
-	if len(collision) == 0 && newValues > 0 {
-		response, _ = aggregateSignatures(p, *response, rumor.Rumor.Response)
-		return true
-	} else if len(collision) > 0 && newValues > 0 {
-		pullingResponses = append(pullingResponses, &Response{
-			Signature: rumor.Rumor.Response.Signature,
-			Mask:      rumor.Rumor.Response.Mask,
-		})
-		pullingCollisionMasks = append(pullingCollisionMasks, createMaskFromIndexList(collision, len(rumor.Rumor.Response.Mask)))
-		return true
-	}
-	return false
-}
-
-func masksCollision(mask1 []byte, mask2 []byte) ([]uint32, uint32) {
-	collision := make([]uint32, 0)
-	newValues := uint32(0)
-	for i := range mask1 {
-		if mask1[i] == 1 && mask2[i] == 1 {
-			collision = append(collision, uint32(i))
-		}
-		if mask1[i] == 1 && mask2[i] == 0 || mask1[i] == 0 && mask2[i] == 1 {
-			newValues = newValues + 1
-		}
-	}
-	return collision, newValues
-}
-
-func createMaskFromIndexList(indexes []uint32, maskLen int) []byte {
-	mask := make([]byte, maskLen)
-	for _, index := range indexes {
-		mask[index] = 1
-	}
-	return mask
-}
-
-func checkPullingResponses(response *Response, collectedSignatures *RumorResponses, pullingResponses []*Response, pullingCollisionMasks [][]byte, p *BlsCosiSubstract) bool {
-	signatureRequestIds := make(map[uint32]bool)
-	for i, pullRes := range pullingResponses {
-		contains, substractIds := bitmapContainsMask(collectedSignatures.bitMap, pullingCollisionMasks[i])
-		if contains {
-			substractedSignature := &Response{
-				Signature: response.Signature,
-				Mask:      response.Mask,
-			}
-			for _, idx := range substractIds {
-				substractedSignature, _ = substractSignatures(p, *substractedSignature, *collectedSignatures.SelectById(idx))
-			}
-			response, _ = aggregateSignatures(p, *substractedSignature, *pullRes)
-			pullingResponses = append(pullingResponses[:i], pullingResponses[i+1:]...)
-			pullingCollisionMasks = append(pullingCollisionMasks[:i], pullingCollisionMasks[i+1:]...)
-			if p.IsRoot() && p.isEnough(*response) {
-				return true
-			}
-			return checkPullingResponses(response, collectedSignatures, pullingResponses, pullingCollisionMasks, p)
-		} else {
-			for _, idx := range substractIds {
-				signatureRequestIds[idx] = true
-			}
-		}
-	}
-
-	for keyIdx := range signatureRequestIds {
-		p.sendSignatureRequest(p.TreeNodeInstance.List()[int(keyIdx)], keyIdx)
-	}
-
-	return false
-}
-
-func bitmapContainsMask(mask BitMap, submask []byte) (bool, []uint32) {
-	substractIds := make([]uint32, 0)
-	missingIds := make([]uint32, 0)
-	contains := true
-	for i := range submask {
-		if submask[i] == 1 {
-			if mask[uint32(i)] {
-				substractIds = append(substractIds, uint32(i))
-			} else {
-				contains = false
-				missingIds = append(substractIds, uint32(i))
-			}
-		}
-	}
-	if contains {
-		return contains, substractIds
-	} else {
-		return contains, missingIds
-	}
-}
-
-func substractSignatures(p *BlsCosiSubstract, response1 Response, response2 Response) (*Response, error) {
-	//substractedMask := make([]byte, len(response1.Mask))
-	//for i := range response1.Mask {
-	//	if response2.Mask[i] == 1 {
-	//		substractedMask[i] = 0
-	//	} else {
-	//		substractedMask[i] = response1.Mask[i]
-	//	}
-	//}
-
-	finalPoint := p.suite.G1().Point()
-	err := finalPoint.UnmarshalBinary(response1.Signature)
-	if err != nil {
-		return nil, err
-	}
-
-	secondPoint := p.suite.G1().Point()
-	err = secondPoint.UnmarshalBinary(response2.Signature)
-	if err != nil {
-		return nil, err
-	}
-
-	finalPoint = finalPoint.Sub(finalPoint, secondPoint)
-
-	data, err := finalPoint.MarshalBinary()
-	if err != nil {
-		return nil, err
-	}
-
-	return &Response{data, response1.Mask}, nil
 }

@@ -1,0 +1,7 @@
+/build/
+/test_data/
+/simulation
+
+deter.toml
+deploy
+simulation_bundle
