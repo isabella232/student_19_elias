@@ -5,6 +5,7 @@ package protocol
 import (
 	"errors"
 	"fmt"
+	"go.dedis.ch/kyber/v3/sign/bls"
 	"math/rand"
 	"sync"
 	"time"
@@ -137,6 +138,7 @@ func (p *BlsCosiMaskAggr) Dispatch() error {
 
 	var rumor *RumorMessage
 	var ownId uint32
+	var finalResponse *Response
 
 	// The root must wait for Start() to have been called.
 	if p.IsRoot() {
@@ -174,16 +176,16 @@ func (p *BlsCosiMaskAggr) Dispatch() error {
 	}
 
 	// responses is a map where we collect all signatures.
-	var responses = NewRumorResponses(make(ResponsesMap), make(BitMap))
+	allResponses := NewAllResponses(Response{}, make(BitMap), Response{}, make(BitMap), make([]*Response, 0), make([]BitMap, 0))
 
 	// Add own signature.
-	ownId, err := p.trySign(responses)
+	allResponses, ownId, err := p.trySign(allResponses)
 	if err != nil {
 		return err
 	}
 
 	if rumor != nil {
-		shutdown, err = handleRumor(responses, rumor, p)
+		shutdown, finalResponse, err = handleRumor(allResponses, rumor, p)
 		if err != nil {
 			return err
 		}
@@ -193,12 +195,12 @@ func (p *BlsCosiMaskAggr) Dispatch() error {
 	for !shutdown {
 		select {
 		case rumor := <-p.RumorsChan:
-			shutdown, err = handleRumor(responses, &rumor, p)
+			shutdown, finalResponse, err = handleRumor(allResponses, &rumor, p)
 			if err != nil {
 				return err
 			}
 		case signatureRequest := <-p.SignatureRequestChan:
-			shutdown, err = handleSignatureRequest(responses, &signatureRequest, p)
+			shutdown, finalResponse, err = handleSignatureRequest(allResponses, &signatureRequest, p)
 			if err != nil {
 				return err
 			}
@@ -214,7 +216,7 @@ func (p *BlsCosiMaskAggr) Dispatch() error {
 			}
 		case <-ticker.C:
 			log.Lvl5("Outgoing rumor")
-			p.sendRumors(*responses, ownId)
+			p.sendRumors(*allResponses, ownId)
 		case <-protocolTimeout:
 			shutdown = true
 			done = true
@@ -228,7 +230,19 @@ func (p *BlsCosiMaskAggr) Dispatch() error {
 
 		log.Lvlf3("%v is aggregating signatures", p.ServerIdentity())
 		// generate root signature
-		signaturePoint, finalMask, err := responses.Aggregate(p.suite, p.Publics())
+
+		var sigs [][]byte
+		sigs = append(sigs, finalResponse.Signature)
+
+		// These signatures have already been multiplied with their coefficients
+		// So we use the plain BLS aggregation rather than BDN
+		sig, err := bls.AggregateSignatures(p.suite, sigs...)
+		if err != nil {
+			return err
+		}
+
+		signaturePoint := p.suite.G1().Point()
+		err = signaturePoint.UnmarshalBinary(sig)
 		if err != nil {
 			return err
 		}
@@ -237,6 +251,12 @@ func (p *BlsCosiMaskAggr) Dispatch() error {
 		if err != nil {
 			return err
 		}
+
+		finalMask, err := sign.NewMask(p.suite, p.Publics(), nil)
+		if err != nil {
+			return err
+		}
+		finalMask.Merge(finalResponse.Mask)
 
 		finalSig := append(signature, finalMask.Mask()...)
 		log.Lvlf3("%v created final signature %x with mask %b", p.ServerIdentity(), signature, finalMask.Mask())
@@ -272,86 +292,111 @@ func (p *BlsCosiMaskAggr) Dispatch() error {
 	return nil
 }
 
-func handleRumor(responses *RumorResponses, rumor *RumorMessage, p *BlsCosiMaskAggr) (bool, error) {
-	diffBitMap, err := responses.Update(rumor.Rumor.Responses, rumor.Rumor.BitMap)
+func handleRumor(allResponses *AllResponses, rumor *RumorMessage, p *BlsCosiMaskAggr) (bool, *Response, error) {
+	isEnough, finalResponse, err := allResponses.Add(rumor.Rumor, p)
 	if err != nil {
-		return false, err
-	}
-	log.Lvlf5("Incoming rumor, %d known, %d needed, is-root %v", len(responses.bitMap), p.Threshold, p.IsRoot())
-	if p.IsRoot() && p.isEnough(*responses) {
-		// We've got enough signatures.
-		return true, nil
-	}
-	if len(diffBitMap) > 0 {
-		p.sendSignatureRequest(rumor.TreeNode, make(ResponsesMap), diffBitMap)
+		return false, nil, err
 	}
 
-	return false, nil
+	log.Lvlf5("Incoming rumor, %d known, %d needed, is-root %v", len(allResponses.BuiltMap), p.Threshold, p.IsRoot())
+	if p.IsRoot() && isEnough {
+		// We've got enough signatures.
+		return true, finalResponse, nil
+	}
+	requestMap, isEmpty := getRequestMapFromPeer(allResponses.BuiltMap, rumor.Rumor.AvailableMask)
+	if !isEmpty {
+		p.sendSignatureRequest(rumor.TreeNode, SignatureRequest{Response{
+			Signature: make([]byte, 0), Mask: make([]byte, 0),
+		}, requestMap})
+	}
+
+	return false, nil, nil
 }
 
-func handleSignatureRequest(responses *RumorResponses, signatureReq *SignatureRequestMessage, p *BlsCosiMaskAggr) (bool, error) {
-	if len(signatureReq.SignatureRequest.Responses) > 0 {
-		diffBitMap, err :=
-			responses.Update(signatureReq.SignatureRequest.Responses, signatureReq.SignatureRequest.BitMap)
-		if err != nil {
-			return false, err
+func getRequestMapFromPeer(responseBitMap BitMap, peerBitMap BitMap) (BitMap, bool) {
+	requestMap := make(BitMap)
+	isEmpty := true
+	for index, isEnabled := range responseBitMap {
+		if peerBitMap[index] && isEnabled {
+			requestMap[index] = true
+			isEmpty = false
 		}
-		log.Lvlf5("Incoming response to signature request, %d known, %d needed, is-root %v",
-			len(responses.bitMap), p.Threshold, p.IsRoot())
-		if p.IsRoot() && p.isEnough(*responses) {
-			// We've got enough signatures.
-			return true, nil
-		}
-		if len(diffBitMap) > 0 {
-			p.sendSignatureRequest(signatureReq.TreeNode, make(ResponsesMap), diffBitMap)
+	}
+	return requestMap, isEmpty
+}
+
+func handleSignatureRequest(allResponses *AllResponses, signatureReq *SignatureRequestMessage, p *BlsCosiMaskAggr) (bool, *Response, error) {
+	if len(signatureReq.SignatureRequest.Response.Signature) == 0 {
+		requested, reqBitMap := allResponses.getBestMatch(signatureReq.SignatureRequest, len(p.Publics()))
+		if requested != nil {
+			p.sendSignatureRequest(signatureReq.TreeNode, SignatureRequest{Response{requested.Signature, requested.Mask}, reqBitMap})
 		}
 	} else {
-		pullReply, err := responses.SelectByBitmap(signatureReq.SignatureRequest.BitMap)
+		isEnough, finalResponse, err := allResponses.Add(Rumor{
+			Parameters{},
+			signatureReq.SignatureRequest.Response,
+			signatureReq.SignatureRequest.Mask,
+			make(BitMap),
+			nil,
+		}, p)
 		if err != nil {
-			return false, err
+			return false, nil, err
 		}
-		p.sendSignatureRequest(signatureReq.TreeNode, pullReply.responsesMap, pullReply.bitMap)
+		log.Lvlf5("Incoming rumor, %d known, %d needed, is-root %v", len(allResponses.BuiltMap), p.Threshold, p.IsRoot())
+		if p.IsRoot() && isEnough {
+			// We've got enough signatures.
+			return true, finalResponse, nil
+		}
 	}
 
-	return false, nil
+	return false, nil, nil
 }
 
-func (p *BlsCosiMaskAggr) trySign(responses *RumorResponses) (uint32, error) {
+func (p *BlsCosiMaskAggr) trySign(allResponses *AllResponses) (*AllResponses, uint32, error) {
 	if !p.verificationFn(p.Msg, p.Data) {
 		log.Lvlf4("Node %v refused to sign", p.ServerIdentity())
-		return 0, nil
+		return allResponses, 0, nil
 	}
 	own, idx, err := p.makeResponse()
 	if err != nil {
-		return 0, err
+		return allResponses, 0, err
 	}
-	responses.Add(idx, own)
+	ownMask := make(BitMap)
+	ownMask[uint32(idx)] = true
+
+	allResponses.BuiltResponse = Response{own.Signature, own.Mask}
+	allResponses.BuiltMap[uint32(idx)] = true
+	allResponses.OwnSignature = Response{own.Signature, own.Mask}
+	allResponses.OwnMap[uint32(idx)] = true
+	allResponses.AggregatedResponses = append(allResponses.AggregatedResponses, &Response{own.Signature, own.Mask})
+	auxAggMap := make(BitMap)
+	auxAggMap[uint32(idx)] = true
+	allResponses.AggregatedMaps = append(allResponses.AggregatedMaps, auxAggMap)
 	log.Lvlf4("Node %v signed", p.ServerIdentity())
-	return uint32(idx), nil
+	return allResponses, uint32(idx), nil
 }
 
 // sendRumors sends a rumor message to some random peers.
-func (p *BlsCosiMaskAggr) sendRumors(responses RumorResponses, ownId uint32) {
+func (p *BlsCosiMaskAggr) sendRumors(allResponses AllResponses, ownId uint32) {
 	targets, err := p.getRandomPeers(p.Params.RumorPeers)
 	if err != nil {
 		log.Lvl1("Couldn't get random peers:", err)
 		return
 	}
-	ownSignatureOnly := responses.OwnSignatureWithMap(ownId)
 	log.Lvl5("Sending rumors")
 	for _, target := range targets {
-		p.sendRumor(target, *ownSignatureOnly)
+		p.sendRumor(target, allResponses)
 	}
 }
 
 // sendRumor sends the given signatures to a peer.
-func (p *BlsCosiMaskAggr) sendRumor(target *onet.TreeNode, responses RumorResponses) {
-	p.SendTo(target, &Rumor{p.Params, responses.responsesMap, responses.bitMap, p.Msg})
+func (p *BlsCosiMaskAggr) sendRumor(target *onet.TreeNode, allResponses AllResponses) {
+	p.SendTo(target, &Rumor{p.Params, allResponses.OwnSignature, allResponses.OwnMap, allResponses.BuiltMap, p.Msg})
 }
 
 // sendSignatureRequest sends a signature request message to a peer.
-func (p *BlsCosiMaskAggr) sendSignatureRequest(target *onet.TreeNode, responsesMap ResponsesMap, bitMap BitMap) {
-	p.SendTo(target, &SignatureRequest{responsesMap, bitMap})
+func (p *BlsCosiMaskAggr) sendSignatureRequest(target *onet.TreeNode, signatureRequest SignatureRequest) {
+	p.SendTo(target, &signatureRequest)
 }
 
 // sendShutdowns sends a shutdown message to some random peers.
@@ -403,11 +448,6 @@ func verify(suite pairing.Suite, sig []byte, msg []byte, public kyber.Point) err
 		return fmt.Errorf("didn't get a valid signature: %s", err)
 	}
 	return nil
-}
-
-// isEnough returns true if we have enough responses.
-func (p *BlsCosiMaskAggr) isEnough(responses RumorResponses) bool {
-	return len(responses.bitMap) >= p.Threshold
 }
 
 // getRandomPeers returns a slice of random peers (not including self).
@@ -501,9 +541,24 @@ func (p *BlsCosiMaskAggr) makeResponse() (*Response, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
+	// Multiply signature with its coefficient immediately
+	sigAdd := [][]byte{sig}
+	maskAdd, err := sign.NewMask(p.suite, p.Publics(), nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	maskAdd.Merge(mask.Mask())
+	aggSig, err := bdn.AggregateSignatures(p.suite, sigAdd, maskAdd)
+	if err != nil {
+		return nil, 0, err
+	}
+	data, err := aggSig.MarshalBinary()
+	if err != nil {
+		return nil, 0, err
+	}
 
 	return &Response{
-		Mask:      mask.Mask(),
-		Signature: sig,
+		Signature: data,
+		Mask:      maskAdd.Mask(),
 	}, idx, nil
 }

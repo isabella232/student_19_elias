@@ -1,101 +1,211 @@
 package protocol
 
 import (
-	"sort"
-
-	"go.dedis.ch/kyber/v3"
-	"go.dedis.ch/kyber/v3/pairing"
 	"go.dedis.ch/kyber/v3/sign"
-	"go.dedis.ch/kyber/v3/sign/bdn"
-	"go.dedis.ch/onet/v3/log"
+	"go.dedis.ch/kyber/v3/sign/bls"
+	"reflect"
 )
 
-type ResponsesMap map[uint32]*Response
 type BitMap map[uint32]bool
 
-type RumorResponses struct {
-	responsesMap ResponsesMap
-	bitMap       BitMap
+type AllResponses struct {
+	OwnSignature        Response
+	OwnMap              BitMap
+	BuiltResponse       Response
+	BuiltMap            BitMap
+	AggregatedResponses []*Response
+	AggregatedMaps      []BitMap
 }
 
-func NewRumorResponses(responsesMap ResponsesMap, bitMap BitMap) *RumorResponses {
-	return &RumorResponses{
-		responsesMap: responsesMap,
-		bitMap:       bitMap,
+func NewAllResponses(ownSignature Response, ownMap BitMap, builtResponse Response, builtMap BitMap,
+	aggregatedResponses []*Response, aggregatedMaps []BitMap) *AllResponses {
+	return &AllResponses{ownSignature,
+		ownMap,
+		builtResponse,
+		builtMap,
+		aggregatedResponses,
+		aggregatedMaps,
 	}
 }
 
-func (responses RumorResponses) Add(idx int, response *Response) error {
-	responses.responsesMap[uint32(idx)] = response
-	responses.bitMap[uint32(idx)] = true
-	return nil
-}
-
-func (responses RumorResponses) Update(newResponsesMap ResponsesMap, newBitMap BitMap) (BitMap, error) {
-	for key, response := range newResponsesMap {
-		responses.responsesMap[key] = response
-		responses.bitMap[key] = true
-	}
-
-	for key, _ := range responses.bitMap {
-		_, ok := newBitMap[key]
-		if ok {
-			delete(newBitMap, key)
-		}
-	}
-
-	return newBitMap, nil
-}
-
-func (responses RumorResponses) SelectByBitmap(bitMapFilter BitMap) (*RumorResponses, error) {
-	selectedResponses := NewRumorResponses(make(ResponsesMap), make(BitMap))
-	for key := range bitMapFilter {
-		response, ok := responses.responsesMap[key]
-		if ok {
-			selectedResponses.responsesMap[key] = response
-			selectedResponses.bitMap[key] = true
-		}
-	}
-
-	return selectedResponses, nil
-}
-
-func (responses RumorResponses) OwnSignatureWithMap(ownId uint32) *RumorResponses {
-	ownSignature := NewRumorResponses(make(ResponsesMap), responses.bitMap)
-	ownSignature.responsesMap[ownId] = responses.responsesMap[ownId]
-
-	return ownSignature
-}
-
-func (responses RumorResponses) Aggregate(suite pairing.Suite, publics []kyber.Point) (
-	kyber.Point, *sign.Mask, error) {
-
-	var sigs [][]byte
-	aggMask, err := sign.NewMask(suite, publics, nil)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	log.Lvlf3("aggregating total of %d signatures", aggMask.CountEnabled())
-
-	var keys []uint32
-	for k := range responses.responsesMap {
-		keys = append(keys, k)
-	}
-	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
-	for _, k := range keys {
-		res := responses.responsesMap[k]
-		sigs = append(sigs, res.Signature)
-		err := aggMask.Merge(res.Mask)
+func (allResponses *AllResponses) Add(rumor Rumor, p *BlsCosiMaskAggr) (bool, *Response, error) {
+	if len(rumor.ResponseMask) == 1 {
+		isEnough, finalResponse, err := allResponses.insertToBuiltResponse(rumor, p)
 		if err != nil {
-			return nil, nil, err
+			return false, nil, err
+		}
+
+		if isEnough {
+			return true, finalResponse, nil
 		}
 	}
 
-	aggSig, err := bdn.AggregateSignatures(suite, sigs, aggMask)
+	enoughSig, finalResponse, err := allResponses.insertToAggregateResponses(rumor, p)
 	if err != nil {
-		return nil, nil, err
+		return false, nil, err
+	}
+	if enoughSig {
+		return enoughSig, finalResponse, nil
 	}
 
-	return aggSig, aggMask, err
+	return false, nil, nil
+}
+
+func (allResponses *AllResponses) insertToBuiltResponse(rumor Rumor, p *BlsCosiMaskAggr) (bool, *Response, error) {
+	if !hasConflict(rumor.ResponseMask, allResponses.BuiltMap) {
+		aggResponse, err := aggregateSignatures(allResponses.BuiltResponse, rumor.Response, p)
+
+		if err != nil {
+			return false, nil, err
+		}
+		for index, isEnabled := range rumor.ResponseMask {
+			if isEnabled {
+				allResponses.BuiltMap[index] = true
+			}
+		}
+		allResponses.BuiltResponse = Response{
+			aggResponse.Signature,
+			aggResponse.Mask,
+		}
+		enoughSig, finalResponse := allResponses.findEnoughSigBuilt(p.Threshold)
+		if enoughSig {
+			return true, finalResponse, nil
+		}
+	}
+
+	return false, nil, nil
+}
+
+func aggregateSignatures(response1 Response, response2 Response, p *BlsCosiMaskAggr) (*Response, error) {
+	mask, err := sign.NewMask(p.suite, p.Publics(), nil)
+	if err != nil {
+		return nil, err
+	}
+	mask.Merge(response1.Mask)
+	mask.Merge(response2.Mask)
+	sig, err := bls.AggregateSignatures(p.suite, response1.Signature, response2.Signature)
+	if err != nil {
+		return nil, err
+	}
+	return &Response{sig, mask.Mask()}, nil
+}
+
+func getSignatureIds(bitMap BitMap) []uint32 {
+	signatureIds := make([]uint32, 0)
+
+	for index, isEnabled := range bitMap {
+		if isEnabled {
+			signatureIds = append(signatureIds, index)
+		}
+	}
+	return signatureIds
+}
+
+func hasConflict(bitMap1 BitMap, bitMap2 BitMap) bool {
+	for index, isEnabled1 := range bitMap1 {
+		if isEnabled1 && bitMap2[index] {
+			return true
+		}
+	}
+	return false
+}
+
+func (allResponses *AllResponses) findEnoughSig(threshold int) (bool, *Response) {
+	found, response := allResponses.findEnoughSigBuilt(threshold)
+	if found {
+		return found, response
+	}
+	found, response = allResponses.findEnoughSigAggregated(threshold)
+	return found, response
+}
+
+func (allResponses *AllResponses) findEnoughSigBuilt(threshold int) (bool, *Response) {
+	if len(allResponses.BuiltMap) > threshold {
+		return true, &allResponses.BuiltResponse
+	} else {
+		return false, nil
+	}
+}
+
+func (allResponses *AllResponses) findEnoughSigAggregated(threshold int) (bool, *Response) {
+	for index, response := range allResponses.AggregatedResponses {
+		if len(allResponses.AggregatedMaps[index]) > threshold {
+			return true, response
+		}
+	}
+	return false, nil
+}
+
+func enoughSigSingleResponse(bitMap BitMap, threshold int) bool {
+	return len(bitMap) > threshold
+}
+
+func (allResponses *AllResponses) insertToAggregateResponses(rumor Rumor, p *BlsCosiMaskAggr) (bool, *Response, error) {
+	newResponses := make([]*Response, 0)
+	newBitMaps := make([]BitMap, 0)
+
+	if enoughSigSingleResponse(rumor.ResponseMask, p.Threshold) {
+		return true, &rumor.Response, nil
+	} else {
+		newResponses = append(newResponses, &Response{rumor.Response.Signature, rumor.Response.Mask})
+		newBitMaps = append(newBitMaps, rumor.ResponseMask)
+	}
+
+	for index, aggResponse := range allResponses.AggregatedResponses {
+		if !hasConflict(allResponses.AggregatedMaps[index], rumor.ResponseMask) {
+			newAggResponse, err := aggregateSignatures(*aggResponse, rumor.Response, p)
+			if err != nil {
+				return false, nil, err
+			}
+			newAggMap := make(BitMap)
+			for indexMask, isEnabled := range allResponses.AggregatedMaps[index] {
+				if isEnabled {
+					newAggMap[indexMask] = true
+				}
+			}
+			for indexMask, isEnabled := range rumor.ResponseMask {
+				if isEnabled {
+					newAggMap[indexMask] = true
+				}
+			}
+
+			if enoughSigSingleResponse(newAggMap, p.Threshold) {
+				return true, newAggResponse, nil
+			}
+			if findIndexResponse(allResponses.AggregatedMaps, newAggMap) == -1 &&
+				findIndexResponse(newBitMaps, newAggMap) == -1 {
+				newResponses = append(newResponses, newAggResponse)
+				newBitMaps = append(newBitMaps, newAggMap)
+			}
+		}
+	}
+
+	return false, nil, nil
+}
+
+func (allResponses *AllResponses) getBestMatch(signatureRequest SignatureRequest, maxLen int) (*Response, BitMap) {
+	if isMaskEqual(allResponses.BuiltMap, signatureRequest.Mask) {
+		return &allResponses.BuiltResponse, allResponses.BuiltMap
+	}
+
+	for index, auxResponse := range allResponses.AggregatedResponses {
+		if isMaskEqual(allResponses.AggregatedMaps[index], signatureRequest.Mask) {
+			return auxResponse, allResponses.AggregatedMaps[index]
+		}
+	}
+
+	return nil, nil
+}
+
+func findIndexResponse(bitMaps []BitMap, bitMap BitMap) int {
+	for index, auxMap := range bitMaps {
+		if isMaskEqual(auxMap, bitMap) {
+			return index
+		}
+	}
+	return -1
+}
+
+func isMaskEqual(mask1 BitMap, mask2 BitMap) bool {
+	return reflect.DeepEqual(mask1, mask2)
 }

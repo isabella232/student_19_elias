@@ -8,18 +8,19 @@ import (
 // DefaultProtocolName can be used from other packages to refer to this protocol.
 // If this name is used, then the suite used to verify signatures must be
 // the default cothority.Suite.
-const DefaultProtocolName = "maskCoSiDefault"
+const DefaultProtocolName = "maskAggrCoSiDefault"
 
 func init() {
-	network.RegisterMessages(&Rumor{}, &SignatureRequest{}, &Shutdown{})
+	network.RegisterMessages(&Rumor{}, &Response{}, &Shutdown{})
 }
 
 // Rumor is a struct that can be sent in the gossip protocol
 type Rumor struct {
-	Params    Parameters
-	Responses ResponsesMap
-	BitMap    BitMap
-	Msg       []byte
+	Params        Parameters
+	Response      Response
+	ResponseMask  BitMap
+	AvailableMask BitMap
+	Msg           []byte
 }
 
 // RumorMessage just contains a Rumor and the data necessary to identify and
@@ -31,8 +32,8 @@ type RumorMessage struct {
 
 // SignatureRequest is a struct that can be sent in the gossip protocol
 type SignatureRequest struct {
-	Responses ResponsesMap
-	BitMap    BitMap
+	Response Response
+	Mask     BitMap
 }
 
 // SignatureRequestMessage contains a SignatureRequest and the data necessary to identify and
