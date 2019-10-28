@@ -316,8 +316,9 @@ func handleRumor(allResponses *AllResponses, rumor *RumorMessage, p *BlsCosiMask
 func getRequestMapFromPeer(responseBitMap BitMap, peerBitMap BitMap) (BitMap, bool) {
 	requestMap := make(BitMap)
 	isEmpty := true
-	for index, isEnabled := range responseBitMap {
-		if peerBitMap[index] && isEnabled {
+	for index, isEnabled := range peerBitMap {
+		_, exists := responseBitMap[index]
+		if !exists && isEnabled {
 			requestMap[index] = true
 			isEmpty = false
 		}

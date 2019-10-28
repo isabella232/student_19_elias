@@ -45,7 +45,7 @@ func (allResponses *AllResponses) Add(rumor Rumor, p *BlsCosiMaskAggr) (bool, *R
 		return false, nil, err
 	}
 	if enoughSig {
-		return enoughSig, finalResponse, nil
+		return true, finalResponse, nil
 	}
 
 	return false, nil, nil
@@ -147,8 +147,15 @@ func (allResponses *AllResponses) insertToAggregateResponses(rumor Rumor, p *Bls
 	if enoughSigSingleResponse(rumor.ResponseMask, p.Threshold) {
 		return true, &rumor.Response, nil
 	} else {
-		newResponses = append(newResponses, &Response{rumor.Response.Signature, rumor.Response.Mask})
-		newBitMaps = append(newBitMaps, rumor.ResponseMask)
+		if findIndexResponse(allResponses.AggregatedMaps, rumor.ResponseMask) == -1 &&
+			findIndexResponse(newBitMaps, rumor.ResponseMask) == -1 {
+			copyResponseMask := make(BitMap)
+			for indexMask := range rumor.ResponseMask {
+				copyResponseMask[indexMask] = true
+			}
+			newResponses = append(newResponses, &Response{rumor.Response.Signature, rumor.Response.Mask})
+			newBitMaps = append(newBitMaps, copyResponseMask)
+		}
 	}
 
 	for index, aggResponse := range allResponses.AggregatedResponses {
