@@ -120,7 +120,7 @@ func (allResponses *AllResponses) findEnoughSig(threshold int) (bool, *Response)
 }
 
 func (allResponses *AllResponses) findEnoughSigBuilt(threshold int) (bool, *Response) {
-	if len(allResponses.BuiltMap) > threshold {
+	if len(allResponses.BuiltMap) >= threshold {
 		return true, &allResponses.BuiltResponse
 	} else {
 		return false, nil
@@ -129,7 +129,7 @@ func (allResponses *AllResponses) findEnoughSigBuilt(threshold int) (bool, *Resp
 
 func (allResponses *AllResponses) findEnoughSigAggregated(threshold int) (bool, *Response) {
 	for index, response := range allResponses.AggregatedResponses {
-		if len(allResponses.AggregatedMaps[index]) > threshold {
+		if len(allResponses.AggregatedMaps[index]) >= threshold {
 			return true, response
 		}
 	}
@@ -137,7 +137,7 @@ func (allResponses *AllResponses) findEnoughSigAggregated(threshold int) (bool, 
 }
 
 func enoughSigSingleResponse(bitMap BitMap, threshold int) bool {
-	return len(bitMap) > threshold
+	return len(bitMap) >= threshold
 }
 
 func (allResponses *AllResponses) insertToAggregateResponses(rumor Rumor, p *BlsCosiMaskAggr) (bool, *Response, error) {

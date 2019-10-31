@@ -218,6 +218,9 @@ func (p *BlsCosiMaskAggr) Dispatch() error {
 			log.Lvl5("Outgoing rumor")
 			p.sendRumors(*allResponses, ownId)
 		case <-protocolTimeout:
+			if finalResponse == nil {
+				finalResponse = &allResponses.OwnSignature
+			}
 			shutdown = true
 			done = true
 		}
