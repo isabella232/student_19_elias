@@ -18,6 +18,7 @@ func init() {
 type Rumor struct {
 	Params   Parameters
 	Response Response
+	Map      BitMap
 	Msg      []byte
 }
 

@@ -65,7 +65,7 @@ def analysis_1():
             sns.stripplot(ref_part_failing, ref_part[metric], size=5, palette=palette)
             handles, _, _, _ = matplotlib.legend._parse_legend_args([ax], ['', ''])
             ax.clear()
-            ax.legend(handles, ['gossip protocol instance', 'New protocol instance'])
+            ax.legend(handles, ['reference gossip protocol instance', 'New protocol instance'])
 
             if per_node:
                 num_working = ref_part.hosts - ref_part_failing
