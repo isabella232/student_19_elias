@@ -32,6 +32,7 @@ type RumorMessage struct {
 // SignatureRequest is a struct that can be sent in the gossip protocol
 type SignatureRequest struct {
 	idx uint32
+	Msg []byte
 }
 
 // SignatureRequestMessage contains a SignatureRequest and the data necessary to identify and
