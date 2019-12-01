@@ -36,10 +36,10 @@ import (
 	"go.dedis.ch/cothority/v3/blscosi/blscosi/check"
 	"go.dedis.ch/kyber/v3/util/encoding"
 	"go.dedis.ch/kyber/v3/util/key"
-	"go.dedis.ch/onet/v3/app"
-	"go.dedis.ch/onet/v3/cfgpath"
-	"go.dedis.ch/onet/v3/log"
-	"go.dedis.ch/onet/v3/network"
+	"go.dedis.ch/onet/v4/app"
+	"go.dedis.ch/onet/v4/cfgpath"
+	"go.dedis.ch/onet/v4/log"
+	"go.dedis.ch/onet/v4/network"
 	cli "gopkg.in/urfave/cli.v1"
 )
 

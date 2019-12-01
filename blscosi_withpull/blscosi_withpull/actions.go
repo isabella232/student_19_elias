@@ -12,8 +12,8 @@ import (
 
 	"github.com/dedis/student_19_elias/blscosi_withpull"
 	"github.com/dedis/student_19_elias/blscosi_withpull/blscosi_withpull/check"
-	"go.dedis.ch/onet/v3/app"
-	"go.dedis.ch/onet/v3/log"
+	"go.dedis.ch/onet/v4/app"
+	"go.dedis.ch/onet/v4/log"
 	cli "gopkg.in/urfave/cli.v1"
 )
 

@@ -1,8 +1,8 @@
 package protocol
 
 import (
-	"go.dedis.ch/onet/v3"
-	"go.dedis.ch/onet/v3/network"
+	"go.dedis.ch/onet/v4"
+	"go.dedis.ch/onet/v4/network"
 )
 
 // DefaultProtocolName can be used from other packages to refer to this protocol.

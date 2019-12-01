@@ -28,10 +28,10 @@ import (
 	blscosi "github.com/dedis/student_19_elias/blscosi_maskaggr"
 	"github.com/dedis/student_19_elias/blscosi_maskaggr/protocol"
 	"go.dedis.ch/kyber/v3/pairing"
-	"go.dedis.ch/onet/v3"
-	"go.dedis.ch/onet/v3/log"
-	"go.dedis.ch/onet/v3/network"
-	"go.dedis.ch/onet/v3/simul/monitor"
+	"go.dedis.ch/onet/v4"
+	"go.dedis.ch/onet/v4/log"
+	"go.dedis.ch/onet/v4/network"
+	"go.dedis.ch/onet/v4/simul/monitor"
 )
 
 const roundSleep = 4 * time.Second
