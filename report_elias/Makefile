@@ -1,5 +1,5 @@
 
-name=thesis
+name=report_semester_project
 
 all: *.tex *.bib 
 	rubber --pdf $(name).tex
