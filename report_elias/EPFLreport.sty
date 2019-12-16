@@ -58,14 +58,24 @@
   \renewcommand{\projectterm}{Bachelor Project Report}
 \fi
 
+\def\@responsible{Responsible}
+\newcommand{\responsible}[1]{
+  \def\@responsible{#1}
+}
+
 \def\@adviser{Thesis Advisor}
 \newcommand{\adviser}[1]{
   \def\@adviser{#1}
 }
 
-\def\@supervisor{Thesis Supervisor}
+\def\@supervisor{Supervisor}
 \newcommand{\supervisor}[1]{
   \def\@supervisor{#1}
+}
+
+\def\@othersupervisor{Supervisor}
+\newcommand{\othersupervisor}[1]{
+  \def\@othersupervisor{#1}
 }
 
 \def\@expert{Expert Reviewer}
@@ -103,8 +113,8 @@
     \includegraphics[width=2.5in]{EPFLlogo}
 \end{textblock*}
 \if@lablogo
-\begin{textblock*}{4in}[0.3066,0.39](5.7in,0.85in)
-    \includegraphics[width=3in]{LABlogo}
+\begin{textblock*}{4in}[0.3066,0.39](6.5in,0.85in)
+    \includegraphics[width=3in]{DEDISlogo.png}
 \end{textblock*}
 \fi
 \vspace*{\drop}
@@ -117,18 +127,18 @@ by \@author\par
 \vspace{\drop}
 
 \flushleft
-{Approved by the Examining Committee:}\par
+%{Approved by the Examining Committee:}\par
 \vspace{1.5\baselineskip}
-\@adviser\\
-Thesis Advisor \\[1\baselineskip]
-\@expert\\
-External Expert \\[1\baselineskip]
+\@responsible\\
+Responsible \\[1\baselineskip]
 \@supervisor\\
-Thesis Supervisor\par
+Supervisor \\[1\baselineskip]
+\@othersupervisor\\
+Supervisor\par
 \centering
 \vspace{1\baselineskip}
-EPFL IC IINFCOM HEXHIVE \\
-BC 160 (Bâtiment BC) \\
+EPFL IC IINFCOM DEDIS \\
+BC 210 (Bâtiment BC) \\
 Station 14 \\
 CH-1015 Lausanne \\[\baselineskip]
 \today
@@ -194,7 +204,7 @@ and show them with \texttt{\textbackslash{}makeacks}.
 \def\abstract{\cleardoublepage
 \chapter*{Abstract}
 \markboth{Abstract}{Abstract}
-\addcontentsline{toc}{chapter}{Abstract (English/Français)}}
+\addcontentsline{toc}{chapter}{Abstract}}
 \def\endabstract{}
 
 \def\frenchabstract{\begin{otherlanguage}{french}
