@@ -1,7 +1,6 @@
 package protocol
 
 import (
-	"go.dedis.ch/kyber/v3"
 	"go.dedis.ch/onet/v4"
 	"go.dedis.ch/onet/v4/network"
 )
@@ -9,7 +8,7 @@ import (
 // DefaultProtocolName can be used from other packages to refer to this protocol.
 // If this name is used, then the suite used to verify signatures must be
 // the default cothority.Suite.
-const DefaultProtocolName = "rumorCoSiDefault"
+const DefaultProtocolName = "rumorCoSiService"
 
 func init() {
 	network.RegisterMessages(&Rumor{}, &Shutdown{}, &Response{}, &Stop{})
@@ -73,5 +72,3 @@ type StructStop struct {
 	*onet.TreeNode
 	Stop
 }
-
-type SignaturesMap map[network.ServerIdentityID]kyber.Scalar

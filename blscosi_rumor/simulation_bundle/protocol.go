@@ -21,6 +21,7 @@ In the Node-method you can read the files that have been created by the
 
 import (
 	"fmt"
+	"go.dedis.ch/kyber/v3/sign/bdn"
 	"math/rand"
 	"time"
 
@@ -80,13 +81,21 @@ func (s *SimulationProtocol) Setup(dir string, hosts []string) (*onet.Simulation
 // SimulationBFTree structure which will load the roster- and the
 // tree-structure to speed up the first round.
 func (s *SimulationProtocol) Node(config *onet.SimulationConfig) error {
+	// Set ModifyRumorResponse function, so it uses the private key on each instance
+	// to create a signature.
+	config.Overlay.ModifyRumorResponse = func(message []byte) []byte {
+		sig, err := bdn.Sign(pairing.NewSuiteBn256(), config.Server.ServerIdentity.ServicePrivate("rumorCoSiService"), message)
+		if err != nil {
+			return message
+		}
+		return sig
+	}
+
 	index, _ := config.Roster.Search(config.Server.ServerIdentity.ID)
 	if index < 0 {
 		log.Fatal("Didn't find this node in roster")
 	}
-
 	leaves := config.Tree.Root.Children
-
 	if s.MaxDelay > 0 {
 		// delay announcements
 		config.Server.RegisterProcessorFunc(onet.ProtocolMsgID, func(e *network.Envelope) error {
@@ -187,14 +196,13 @@ func (s *SimulationProtocol) Run(config *onet.SimulationConfig) error {
 		log.Lvl5(suite)
 		log.Lvl5(publics)
 
-		// TODO enable verification
-		//err = serviceReply.Signature.VerifyAggregate(suite, proposal, publics)
-		//if err != nil {
-		//	return fmt.Errorf("error while verifying signature:%s", err)
-		//}
-		//
-		//mask, err := serviceReply.Signature.GetMask(suite, publics)
-		//monitor.RecordSingleMeasure("correct_nodes", float64(mask.CountEnabled()))
+		err = serviceReply.Signature.VerifyAggregate(suite, proposal, publics)
+		if err != nil {
+			return fmt.Errorf("error while verifying signature:%s", err)
+		}
+
+		mask, err := serviceReply.Signature.GetMask(suite, publics)
+		monitor.RecordSingleMeasure("correct_nodes", float64(mask.CountEnabled()))
 
 		log.Lvl2("Signature correctly verified!")
 	}
