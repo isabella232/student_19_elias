@@ -2,7 +2,6 @@ package protocol
 
 import (
 	"go.dedis.ch/onet/v4"
-	"go.dedis.ch/onet/v4/network"
 )
 
 // DefaultProtocolName can be used from other packages to refer to this protocol.
@@ -11,7 +10,6 @@ import (
 const DefaultProtocolName = "rumorCoSiService"
 
 func init() {
-	network.RegisterMessages(&Rumor{}, &Shutdown{}, &Response{}, &Stop{})
 }
 
 // Rumor is a struct that can be sent in the gossip protocol

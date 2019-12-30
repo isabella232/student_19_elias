@@ -107,7 +107,7 @@ func (s *SimulationProtocol) Node(config *onet.SimulationConfig) error {
 			}
 
 			switch msg.(type) {
-			case *protocol.Rumor, *protocol.Shutdown:
+			case *protocol.Rumor, *protocol.Shutdown, *onet.Rumor:
 				sleepSecs := rand.Float64()*(s.MaxDelay-s.MinDelay) + s.MinDelay
 				sleepNsecs := sleepSecs * float64(time.Second/time.Nanosecond)
 				log.Lvlf3("Delaying message by %.3f for simulation on %v", sleepSecs, config.Server.ServerIdentity)
@@ -137,7 +137,7 @@ func (s *SimulationProtocol) Node(config *onet.SimulationConfig) error {
 				}
 
 				switch msg.(type) {
-				case *protocol.Rumor, *protocol.Shutdown:
+				case *protocol.Rumor, *protocol.Shutdown, *onet.Rumor:
 					log.Lvl2("Ignoring blscosi message for simulation on ", config.Server.ServerIdentity)
 				default:
 					config.Overlay.Process(e)
