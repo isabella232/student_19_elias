@@ -69,7 +69,7 @@ def analysis_1():
             y_new2 = extract_dataframe(new2_part, metric, factor, per_node)
 #             sns.catplot(ref_part.failingleaves, y_ref, color=palette[0])
 #             sns.catplot(new_part.failingleaves, y_new,  color=palette[1])
-            y_ref["Protocol"] = "BLS CoSi"
+            y_ref["Protocol"] = "Existing Gossip Aggregation"
             y_new["Protocol"] = "Mask"
             y_new2["Protocol"] = "Mask Aggregation"
             final = pd.concat([y_ref, y_new, y_new2])

@@ -1,7 +1,7 @@
 Simulation = "BlsCosiBundleProtocol"
 Servers = 8
 Bf = 200
-Rounds = 1
+Rounds = 3
 RunWait = "600s"
 Suite = "bn256.adapter"
 

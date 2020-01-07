@@ -64,7 +64,7 @@ def analysis_1():
             y_new = extract_dataframe(new_part, metric, factor, per_node)
 #             sns.catplot(ref_part.failingleaves, y_ref, color=palette[0])
 #             sns.catplot(new_part.failingleaves, y_new,  color=palette[1])
-            y_ref["Protocol"] = "Existing BLS CoSi"
+            y_ref["Protocol"] = "Existing Gossip Aggregation"
             y_new["Protocol"] = "ONet Hybrid Protocol"
             final = pd.concat([y_ref, y_new])
             # sns.set(rc={'figure.figsize':(12,6)})
