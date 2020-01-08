@@ -1,4 +1,6 @@
-module github.com/dedis/student_19_gossip_bls
+module github.com/dedis/student_19_elias
+
+replace go.dedis.ch/onet/v4 v4.0.0-pre1 => /home/elias/go/src/github.com/dedis/student_19_elias_onet
 
 require (
 	cloud.google.com/go v0.39.0 // indirect
@@ -11,9 +13,9 @@ require (
 	github.com/stretchr/objx v0.2.0 // indirect
 	github.com/stretchr/testify v1.3.0
 	go.dedis.ch/cothority/v3 v3.1.0
-	go.dedis.ch/kyber/v3 v3.0.3
-	go.dedis.ch/onet/v3 v3.0.14
-	go.dedis.ch/protobuf v1.0.6
+	go.dedis.ch/kyber/v3 v3.0.4
+	go.dedis.ch/onet/v4 v4.0.0-pre1
+	go.dedis.ch/protobuf v1.0.8
 	go.opencensus.io v0.22.0 // indirect
 	golang.org/x/crypto v0.0.0-20190530122614-20be4c3c3ed5 // indirect
 	golang.org/x/exp v0.0.0-20190510132918-efd6b22b2522 // indirect
@@ -33,3 +35,5 @@ require (
 	gopkg.in/urfave/cli.v1 v1.20.0
 	honnef.co/go/tools v0.0.0-20190602125119-5a4a2f4a438d // indirect
 )
+
+go 1.13

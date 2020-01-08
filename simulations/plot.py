@@ -49,7 +49,7 @@ def analysis_1():
 
         _, ax = plt.subplots()
         sns.barplot(ref_part_failing, ref_failure, color='red', ci=68, capsize=.2)
-        plt.title(f'BLS CoSi: rates of total protocol failure ($n={num_nodes}$)')
+        plt.title(f'New protocol: rates of total protocol failure ($n={num_nodes}$)')
         plt.xlabel('failing nodes')
         plt.ylabel('protocol failure rate')
         ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda y, _: format(y, '.0%')))
@@ -65,7 +65,7 @@ def analysis_1():
             sns.stripplot(ref_part_failing, ref_part[metric], size=5, palette=palette)
             handles, _, _, _ = matplotlib.legend._parse_legend_args([ax], ['', ''])
             ax.clear()
-            ax.legend(handles, ['gossip protocol instance', 'BLS CoSi instance'])
+            ax.legend(handles, ['reference gossip protocol instance', 'New protocol instance'])
 
             if per_node:
                 num_working = ref_part.hosts - ref_part_failing
@@ -88,7 +88,7 @@ def analysis_1():
             sns.stripplot(ref_part_failing, ref_part[metric], size=5, palette=palette)
             handles, _, _, _ = matplotlib.legend._parse_legend_args([ax], ['', ''])
             ax.clear()
-            ax.legend(handles, ['gossip protocol instance', 'BLS CoSi instance'])
+            ax.legend(handles, ['gossip protocol instance', 'New protocol instance'])
 
             if per_node:
                 num_working = ref_part.hosts - ref_part_failing

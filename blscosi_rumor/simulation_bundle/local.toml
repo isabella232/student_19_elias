@@ -1,0 +1,9 @@
+Simulation = "BlsCosiRumorProtocol"
+Servers = 8
+Bf = 200
+Rounds = 3
+RunWait = "600s"
+Suite = "bn256.adapter"
+
+Hosts, FailingLeaves, MinDelay, MaxDelay, GossipTick, RumorPeers, ShutdownPeers, TreeMode
+   10, 3,             0.01,     0.5,      0.1,        2,          2,             1
