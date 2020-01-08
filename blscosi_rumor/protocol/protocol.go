@@ -196,7 +196,7 @@ func (p *BlsCosi) Dispatch() error {
 		log.Lvl3(p.ServerIdentity().Address, "collected all signature responses")
 
 		log.Lvlf3("%v is aggregating signatures", p.ServerIdentity())
-		log.Lvlf2("%v signatures were aggregated", len(receivedSignatures))
+		log.Lvlf3("%v signatures were aggregated", len(receivedSignatures))
 
 		// generate root signature
 		signaturePoint, finalMask, err := responses.Aggregate(p.suite, p.Publics())
