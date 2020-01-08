@@ -1,7 +1,7 @@
 Simulation = "BlsCosiRumorProtocol"
-Servers = 8
+Servers = 1
 Bf = 200
-Rounds = 3
+Rounds = 1
 RunWait = "600s"
 Suite = "bn256.adapter"
 

@@ -204,7 +204,7 @@ func (s *SimulationProtocol) Run(config *onet.SimulationConfig) error {
 		mask, err := serviceReply.Signature.GetMask(suite, publics)
 		monitor.RecordSingleMeasure("correct_nodes", float64(mask.CountEnabled()))
 
-		log.Lvl2("Signature correctly verified!")
+		log.Lvl1("Signature correctly verified!")
 	}
 	return nil
 }
