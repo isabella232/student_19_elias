@@ -97,22 +97,13 @@ func (s *SimulationProtocol) Node(config *onet.SimulationConfig) error {
 	}
 	leaves := config.Tree.Root.Children
 	if s.MaxDelay > 0 {
-		// delay announcements
-		config.Server.RegisterProcessorFunc(onet.ProtocolMsgID, func(e *network.Envelope) error {
-			//get message
-			_, msg, err := network.Unmarshal(e.Msg.(*onet.ProtocolMsg).MsgSlice, config.Server.Suite())
-			if err != nil {
-				log.Fatal("error while unmarshaling a message:", err)
-				return err
-			}
+		// delay messages
+		config.Server.RegisterProcessorFunc(onet.RumorMsgID, func(e *network.Envelope) error {
+			sleepSecs := rand.Float64()*(s.MaxDelay-s.MinDelay) + s.MinDelay
+			sleepNsecs := sleepSecs * float64(time.Second/time.Nanosecond)
+			log.Lvlf3("Delaying message by %.3f for simulation on %v", sleepSecs, config.Server.ServerIdentity)
+			time.Sleep(time.Duration(sleepNsecs))
 
-			switch msg.(type) {
-			case *protocol.Rumor, *protocol.Shutdown, *onet.Rumor:
-				sleepSecs := rand.Float64()*(s.MaxDelay-s.MinDelay) + s.MinDelay
-				sleepNsecs := sleepSecs * float64(time.Second/time.Nanosecond)
-				log.Lvlf3("Delaying message by %.3f for simulation on %v", sleepSecs, config.Server.ServerIdentity)
-				time.Sleep(time.Duration(sleepNsecs))
-			}
 			config.Overlay.Process(e)
 			return nil
 		})
@@ -124,24 +115,11 @@ func (s *SimulationProtocol) Node(config *onet.SimulationConfig) error {
 		numToIntercept = len(leaves)
 	}
 	toIntercept := leaves[:numToIntercept]
-	// intercept announcements on some nodes
+	// intercept messages on some nodes
 	for _, n := range toIntercept {
 		if n.ServerIdentity.ID.Equal(config.Server.ServerIdentity.ID) {
 			// This will override the delay ProcessorFunc, which is fine.
-			config.Server.RegisterProcessorFunc(onet.ProtocolMsgID, func(e *network.Envelope) error {
-				//get message
-				_, msg, err := network.Unmarshal(e.Msg.(*onet.ProtocolMsg).MsgSlice, config.Server.Suite())
-				if err != nil {
-					log.Fatal("error while unmarshaling a message:", err)
-					return err
-				}
-
-				switch msg.(type) {
-				case *protocol.Rumor, *protocol.Shutdown, *onet.Rumor:
-					log.Lvl2("Ignoring blscosi message for simulation on ", config.Server.ServerIdentity)
-				default:
-					config.Overlay.Process(e)
-				}
+			config.Server.RegisterProcessorFunc(onet.RumorMsgID, func(e *network.Envelope) error {
 				return nil
 			})
 			break // this node has been found
@@ -204,7 +182,7 @@ func (s *SimulationProtocol) Run(config *onet.SimulationConfig) error {
 		mask, err := serviceReply.Signature.GetMask(suite, publics)
 		monitor.RecordSingleMeasure("correct_nodes", float64(mask.CountEnabled()))
 
-		log.Lvl2("Signature correctly verified!")
+		log.Lvl1("Signature correctly verified!")
 	}
 	return nil
 }
