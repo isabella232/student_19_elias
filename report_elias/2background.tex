@@ -1,0 +1,104 @@
+\section{Background}
+
+\subsection{Gossip protocols}
+\label{gossip}
+
+Gossip protocols are often used for information dissemination and computing an aggregate between many nodes~\cite{Birm07}. Generally, they can be used for a range of tasks where information needs to be shared between different nodes.
+They provide many useful properties while maintaining reasonable efficiency.
+One important such property is logarithmic \emph{mixing time}: if the number of nodes is $n$, a correctly designed gossip protocol propagates a new piece of information to all peers in $O(log(n))$ time, assuming nodes are not overwhelmed by the rate of information transfer~\cite{Birm07}.
+In addition to this, the number of messages that a single node sends and receives is constant among the existing peers. Another advantage is the simplicity of gossip protocols: all participating nodes will usually run the same code.
+
+A typical basic gossip protocol repeatedly runs three steps in a loop: \emph{peer selection}, \emph{data exchange} and \emph{data processing}~\cite{Kerm07}.
+The first step consists of peer selection, here the node chooses one or more peers to exchange information with, typically this selection is random. Choosing a new set of random peers on every gossip round is a simple and effective way to achieve fault tolerance.
+In the second step, data exchange, data is sent to or received from the peers according to the selection made in the previous step. There are two types of data exchange models, \emph{push} and \emph{pull}. The \emph{push model} sends information to the peer and no reply is expected. In the \emph{pull model}, a request is sent, to which the peer responds with the information they know. Is is also possible to combine both of the models in one protocol.
+The third step in the gossip protocol is data processing, this step is optional. Here the new information is processed or passed to a higher application layer. Type of processing and how it is done depends on the domain and application of the protocol.
+
+A gossip protocol that is concerned with information dissemination can be analyzed by looking at the different states in which a node can find itself in regards to an update~\cite{Jela13}.
+In this context, an update is a piece of information that is being spread. There are usually up to three states called \emph{susceptible~(S)}, which means the node does not know about the update, \emph{infected~(I)}, meaning the node is actively spreading the update, and \emph{removed~(R)}, which means that the node knows about the update, but is no longer actively spreading it.
+Using these definitions, some gossip protocols use a SI~model, where a node starts in state~S and switches to state~I when it learns about an update, after which it can no longer change its state with regards to this update. Another possible model is the SIR~model, where a change to state~R can happen after the node transitions to state~I.
+
+\subsection{Multi-signatures}
+
+A \emph{digital signature} is a tool of asymmetric cryptography (also called public-key cryptography), which is computed from a message and a private key, and can be verified using the corresponding public key and the message.
+\emph{Cosigning} or collective signing, as used in this project and report, means that multiple nodes digitally sign the same message or statement.
+For this purpose, a \emph{multi-signature} can be used. This is a compact value that proves that multiple nodes have signed the same message~\cite{Boneh18}. A multi-signature is computed by aggregating many signatures from different nodes.
+The advantage of assigning a multi-signature to the message, instead of a list of the signatures from different nodes, is that a multi-signature is smaller. This is especially important in protocols where many cosignatures are exchanged between nodes, as is the case in ByzCoin~\cite{Koko16} (a decentralized cryptocurrency using a Byzantine consensus protocol).
+
+The multi-signature scheme used in the new protocol is based on work by Boneh, Drijvers and Neven~\cite{Boneh18} and is implemented under the name \emph{BDN} in the cryptographic library \emph{Kyber}~\cite{Kyber}.
+BDN multi-signatures are based on the Boneh-Lynn-Shacham (\emph{BLS}) signature scheme~\cite{Boneh01} and use commutative groups of prime order both for the signatures and the public keys.
+In the version of the BDN scheme that is used in the existing cosigning protocol and that will also be used in the new protocols implemented, the public keys of all nodes have to be known in advance, even if not all of them end up signing the message.
+The public keys are collectively used to create a unique integer coefficient for each signatory: $\alpha_1$ for the first node, $\alpha_2$ for the second, and so on.
+In a set of three nodes signing the same message, where $S_i$ is the signature of node~$i$, the multi-signature~$S$ is then computed as $S = \alpha_1 * S_1 + \alpha_2 * S_2 + \alpha_3 * S_3$ (using additive group notation).
+A multi-signature from just part of the nodes, such as $\alpha_1 * S_1 + \alpha_3 * S_3$, is equally possible.
+Thanks to the associative and commutative properties (order of operands and grouping of operands does not alter the result), partial multi-signatures from two or more disjoint sets of peers can be added to form a new valid multi-signature. A more in-depth explanation of BDN is found in the paper presenting the scheme~\cite{Boneh18}, and BLS is explained in a relevant article by Snigirev~\cite{Snig18}.
+
+To verify a multi-signature the verifier must know the public keys of all the nodes that are part of the group, including those who did not end up signing. In the context of the cosigning protocols relevant to this project, this is not a problem, since all nodes know the public keys of all peers.
+The verifier must also know which nodes contributed to a multi-signature, so it uses the corresponding public keys for the verification process. This is solved by storing a bitmap together with each multi-signature that indicates the contributing nodes.
+
+
+\subsection{Existing protocol implementations}
+
+\subsubsection{BLS~CoSi protocol}
+
+In BLS~CoSi~\cite{Blscosi}, a protocol instance is initiated when a cosignature is requested on some node by a client from a higher application layer.
+BLS~CoSi is a part of the \emph{Cothority} framework~\cite{Coth}, which handles authenticated communication between nodes, and also is in charge of the distribution of public keys and membership of nodes.
+Therefore, it can be assumed that all nodes know all public keys from the start and that the set of peers is known and constant for the duration of the protocol. Generally, there is a certain threshold of nodes that must sign a message it before it is considered a valid cosignature.
+For this project and report, we assume that \emph{Byzantine consensus} is needed, which requires the assumption that up to $f$ out of $n = 3f+1$ nodes may be faulty (this includes both offline and malicious nodes) and we require $2f+1$ nodes, i.e.~just above two thirds of nodes, to sign a message~\cite{Koko16}.
+
+BLS~CoSi works by arranging all participating nodes in a tree of depth~3.
+The root of this tree is the node where the protocol instance is initiated, which is simultaneously the node where the cosignature needs to be returned to an application layer in the end.
+An initial signature request containing the message to be signed is sent by the root to all its child nodes in the tree.
+
+These internal nodes then send a signature request to their children, which are leaf nodes. The leaf nodes reply by sending their signature to their parent nodes, who then aggregate the received signatures.
+They add their own signature and return the aggregated signature to the root, who then combines the aggregates and its own signature to form the final cosignature. Each node can also choose not to sign the message, and in that case, instead of a signature, it sends a refusal message.
+
+One problem of BLS~CoSi is that if a child of the root is faulty and does not return the expected aggregate, the root potentially misses out on a lot of signatures.
+To mitigate this problem, the root rearranges the tree and tries again if, for example, it has not heard back from a child after a few seconds.
+However, this solution is not ideal, as it is possible that multiple attempts are needed, which can cost a lot of time and bandwidth.
+
+\subsubsection{Gossip aggregation protocol}
+
+As the result of a previous project \cite{ProjExisting}, there is an implementation of message cosigning that uses a gossip protocol. The interface for calling this protocol is the same as for BLS CoSi. As before, the protocol starts with a single node, the root, needing a cosignature. Any node can start a protocol instance and will then be the root for this instance. The root has a special role in the protocol, as the root needs to return a cosignature to an application layer in the end.
+
+During the main part of the protocol, only one type of message is exchanged between nodes, called a \emph{rumor message}. It contains the statement to be signed as well as all the signatures the sender has seen so far.
+At the moment the protocol starts, only the root knows about the protocol.
+The other nodes start participating after they receive a rumor message for the first time.
+
+The behavior of each node during this initial phase of the protocol is simple.
+After receiving a rumor message for the first time, the node adds its own signature to its collection of known signatures (assuming that the node chooses to sign the statement).
+A node also adds all signatures to its collection when they are received for the first time.
+Each node periodically sends a rumor message, containing the full collection of known signatures, to a set of $r$ different randomly selected peers ($r$ is smaller than the number of nodes~$n$).
+This sending of rumor messages happens at a regular interval~$t$, typically a fraction of a second in a context like ByzCoin.
+The parameters $r$ and~$t$ have the same fixed value for all nodes.
+
+This implementation also has two variations on how the aggregation is done. The first and the more simple one, aggregates signatures at the root node after enough signatures from peers have been received. The second variation, aggregates signatures earlier along a conceptual binary tree.
+Each leaf in this tree stands for a signature from a single signatory.
+All other nodes in the binary tree stand for the aggregation of their children.
+For example, with four potential signatories $A$, $B$, $C$ and~$D$, there are four leaves, one for each of them.
+One level up, we might have one parent for the aggregation $\{A, B\}$ and one for $\{C, D\}$.
+At the top of the binary tree is the aggregation of these two: $\{A, B, C, D\}$.
+The second protocol variant aggregates signatures if and only if the aggregation exists in this binary tree.
+This way, there are never any two multi-signatures from disjoint sets of signatories.
+
+As soon as the root node has received a threshold number of signatures through this process of gossip, it sends an aggregated cosignature to the application that requested it.
+At this point, the protocol has fulfilled its task, and all that is left to be done is to wind down the protocol.
+This needs to be done with some care; after all, the other nodes do not know when the protocol is done.
+To signal that the protocol is finished, the root sends a \emph{shutdown message} to $s$ different randomly selected peers and enters \emph{shutdown mode}, where $s$ is another parameter with the same fixed value for all nodes.
+In shutdown mode, incoming rumors are answered with a shutdown message and incoming shutdown messages are ignored.
+The stored collection of signatures is no longer needed in shutdown mode.
+When a node receives a valid shutdown message, it sends the message on to $s$ different randomly selected peers and enters shutdown mode.
+
+The rumor messages act as \emph{push} messages most of the time.
+However, when they reach a node in shutdown mode, they act more like a \emph{pull} message, pulling the shutdown message. The protocol is designed to spread information quickly, with efficiency only being a secondary concern. This is why entering shutdown mode is only possible after it has been proven that the root has received a valid cosignature.
+
+This implementation is more efficient in a scenario with failing nodes than the BLS~Cosi protocol, but at the cost of a higher protocol duration, and increased bandwidth use. It will be used as a benchmark for alternative implementations of gossip-based aggregation by trying variants of the gossip model used.
+
+\subsection{Cothority Overlay Network Library - ONet}
+
+The Overlay-Network (ONet) is a library for simulation and deployment of decentralized, distributed protocols. For this purpose, it offers a framework for research, simulation, and deployment of crypto-related protocols; with a special emphasis on decentralized, distributed protocols. It is used in research for testing out new protocols and running simulations, as well as in production to deploy those protocols as a service in a distributed manner.
+
+ONet is developed by DEDIS/EFPL as part of the Cothority project that aims to deploy a large number of nodes for distributed signing and related projects. In cothority, nodes are commonly named \emph{conodes}. A collective authority or \emph{cothority} is a set of conodes that work together to handle a distributed, decentralized task. ONet offers an abstraction for tree-based communications between thousands of conodes.
+
+ONet allows you to set up protocols, services and apps.
+Protocols are a short-lived set of messages being passed back and forth between one or more conodes,
+Services define an API usable by client programs and instantiate protocols, and apps communicate with the service-API of one or more conodes \cite{ONet}.

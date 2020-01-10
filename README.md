@@ -1,41 +1,31 @@
 # BLS Cosigning via a Gossip Protocol
 
-The aim of this semester project is to build a gossip protocol for building collective signatures.
+This semester project develops and compares alternative implementations of the gossip-based aggregation. The main goal of the new implementations is to reduce the bandwidth used and to be relatively fast. 
+Furthermore, this project adds an hybrid implementation of trees and gossiping inside Cothority's ONet library, which is used for a new implementation of signature aggregation.
 
 
 ## Install and run
 
 ```
-env GO111MODULE=on go get github.com/dedis/student_19_elias
+go get github.com/dedis/student_19_elias
 ```
 
-Navigate to `student_19_elias/blscosi_bundle/blscosi_bundle/`.
+Make sure that go.mod is pointing to the correct version of ONet. If needed, get the following ONet version (which has HybridRumor) and in go.mod point to the directory where this was cloned:```
+go get github.com/dedis/student_19_elias_onet
 
 ```
-env GO111MODULE=on go install
-```
 
-Navigate to `student_19_elias/conode/`.
+Navigate to `student_19_elias/blscosi_hybrid_rumor/blscosi_hybrid_rumor`.
 
 ```
-env GO111MODULE=on go build
-./runnodes.sh -n 6 -v 1
+go install
 ```
-
-In a test folder in a second terminal:
-
-```
-date > date
-blscosi_bundle sign -o sig.json date
-blscosi_bundle verify -o sig.json date
-```
-
 
 ## Run a simulation
 
-Navigate to `student_19_elias/blscosi_bundle/simulation_bundle/`.
+Navigate to `student_19_elias/blscosi_hybrid_rumor/simulation_bundle/`.
 
 ```
-env GO111MODULE=on go install
+go install
 simulation_bundle local.toml
 ```

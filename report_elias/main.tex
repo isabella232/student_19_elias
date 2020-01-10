@@ -1,0 +1,47 @@
+\documentclass[11pt, a4paper]{article} %draft
+
+\usepackage{graphicx,color}
+\usepackage{amssymb, amsmath, array}
+\usepackage[english]{babel}
+\usepackage[babel=true]{csquotes}
+\usepackage{verbatim}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{url}
+
+\begin{document}
+
+\input{cover}
+
+\newpage
+\pagenumbering{roman}
+\begin{abstract}
+Decentralized cosigning protocols have the main purpose of collecting digital signatures of a message from many peers. This type of protocols is used in two existing implementations. The first one is BLS CoSi which uses trees to get the signatures and aggregate them, the second one is a gossip protocol.
+
+This semester project develops and compares alternative implementations of the gossip-based aggregation. The main goal of the new implementations is to reduce the bandwidth used and to be relatively fast. 
+
+Furthermore, this project adds an hybrid implementation of trees and gossiping inside Cothority's ONet library, which is used for a new implementation of signature aggregation. Finally, there is an analysis of this protocol, measuring its performance and finding possible future improvements.
+\end{abstract}
+\tableofcontents
+
+
+
+\newpage
+
+\pagenumbering{arabic}
+% Start page count
+\setcounter{page}{1}
+
+\input{1intro}
+\input{2background}
+\input{3designandimplementation}
+\input{4evaluationandresults}
+\input{5conclusion}
+\input{references}
+
+\appendix
+\input{appendixinstall}
+\input{appendixfullresults}
+
+\end{document}

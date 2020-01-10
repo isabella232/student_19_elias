@@ -1,0 +1,71 @@
+\section{Design and implementation}
+
+\subsection{Alternative gossip-based aggregation protocols}
+
+Similar to the existing BLS~CoSi and Gossip with aggregation implementations, the new cosigning protocol is written in Go and fits into the Cothority project~\cite{Coth}.
+It makes use of different tools developed by the DEDIS lab, including Kyber~\cite{Kyber}.
+
+The interface for calling the new protocol is the same as for BLS~CoSi.
+As before, the protocol starts with a single node, which is called the \emph{root}, requesting a cosignature.
+Any node can start a protocol instance and will then be the root for this instance.
+The root has a special role in the protocol, as the root needs to return a cosignature to an application layer in the end.
+
+
+The parameters $r$ (number of randomly selected nodes for each gossip round), $s$ (number of randomly selected nodes for shutdown message propagation) and $t$ (time interval between gossiping rounds) are sent along with rumor messages in our current implementation to help us test the effects of these parameters in experiments.
+In a real-world implementation, they would be fixed in advance.
+
+For this part of the project, the following alternative gossip protocol models were implemented.
+
+\subsubsection{Mask protocol}
+
+The most important change for this gossip implementation when compared to the existing aggregation gossip one is the use of both push and pull messages. This is achieved by adding a bitmap mask of all the signatures known by the node who is sending the message, so the receiving node can compare this mask with the signatures it has already seen, and then send a pull message to request the specific signatures they still need. In theory this will increase the number of messages sent by nodes, but could potentially reduce the total bandwidth used, since we are reducing the impact of a failing node when compared to the previous tree based implementations. It should also reduce the propagation time needed, since nodes will be able to ask for the signatures they need, and they can be sent not only by the signing peer, but any peer who has seen this signature.
+
+During the main part of the protocol, only one type of message is exchanged between nodes, called a \emph{rumor message}.
+It contains the statement to be signed, the sender's  signature, and a bitmap of all the signatures the node knows and are available for requests. 
+
+Similar to the previous gossip protocol, after receiving a rumor message for the first time, the node adds its own signature to its collection of known signatures (assuming that the node chooses to sign the statement).
+A node also adds all signatures to its collection when they are received for the first time.
+Each node periodically sends a rumor message (with the mentioned contents), to a set of $r$ different randomly selected peers ($r$ is smaller than the number of nodes~$n$).
+This sending of rumor messages happens at a regular interval~$t$. These parameters $r$ and~$t$ have the same fixed value for all nodes.
+
+As soon as the root node has received a threshold number of signatures through this process of gossip, it sends an aggregated cosignature to the application that requested it.
+At this point, the protocol has fulfilled its task, and for the final shutdown step, the root sends a \emph{shutdown message} to $s$ different randomly selected peers and enters \emph{shutdown mode}, where $s$ is another parameter with the same fixed value for all nodes.
+In shutdown mode, incoming rumors are answered with a shutdown message and incoming shutdown messages are ignored. When a node receives a valid shutdown message, it sends the message on to $s$ different randomly selected peers and enters shutdown mode. To prevent an attack where a malicious node causes other nodes to enter shutdown mode prematurely, shutdown messages have to be signed by the root.
+Invalid messages are simply ignored.
+
+
+\subsubsection{Mask aggregation protocol}
+
+For this variation on the mask protocol explained in the previous paragraphs, we also use both push and pull message and a bitmap mask of the signatures known. The difference is in the signature being sent, which instead of being a single one, is a multi-signature, the aggregation of all the signatures known by the sender. The receiving node will store this aggregated signature, see if it comes from a disjoint set of signatories when compared to the signatures it knows. If the received multi-signature does not conflict with the signatures known by the receiver, it will aggregate them. If it does conflict, it will be compared with other received and stored multi-signatures, aggregated if possible and stored.
+All signatures and multi-signatures received are combined in all the possible aggregations, until a node creates a multi-signature with enough signatures to satisfy the protocol.
+
+After the aggregation and storing of multi-signatures, if it doesn't have enough signatures yet, the node will compare the received bitmap mask with the signatures it has already seen, and send a pull message to request the combination of signatures they are missing. In theory this will increase the number of messages sent by nodes, but could potentially reduce the total bandwith used, since we are reducing the impact of a failing node when compared to the previous tree based implementations. It should also reduce the propagation time needed, since nodes will be able to ask for the signatures and/or multi-signatures they need, and they can be sent not only by the signing peer, but any peer who has seen this signature.
+
+The rumor message for this version of the protocol contains the statement to be signed, the sender's  multi-signature, and a bitmap of all the signatures the node knows and are available for requests. 
+
+Similar to the previous gossip protocol, after receiving a rumor message for the first time, the node adds its own signature to its collection of known signatures (assuming that the node chooses to sign the statement).
+A node also adds all signatures and multi-signatures to its collection when they are received for the first time.
+Each node periodically sends a rumor message, to a set of $r$ different randomly selected peers ($r$ is smaller than the number of nodes~$n$). This happens at a regular interval~$t$, and both $r$ and~$t$ have the same fixed value for all nodes.
+
+As soon as the root node has received a threshold number of signatures through this process of gossip, it sends an aggregated cosignature to the application that requested it, shutdown messages are propagated, and then the protocol is finished.
+
+
+\subsubsection{Aggregation protocol with homomorphic subtraction}
+
+In this variation of the gossip protocol, both push and pull messages are sent. The rumor message contains the statement to be signed, the sender's multi-signature, and a bitmap mask of the signatures known by the sender. On the receiving end, the peer will try to aggregate the multi-signature received with its own multi-signature. Any overlapping signatures are subtracted using the scalar point homomorphic subtraction in the Kyber library~\cite{Kyber}, so the result of this subtraction can be aggregated with the received multi-signature. If for the subtraction operation the node needs some specific signatures that they don't know, they will reply with a pull message to the sender. This will only be done if the needed signature is available according to the bitmap mask they received in the message. 
+
+Each node periodically sends a rumor message, to a set of $r$ different randomly selected peers, at a regular interval~$t$, until the signature minimum threshold is reached, then the protocol is shutdown and completed with the delivery of the aggregated cosignature to the application to requested it from the root node.
+
+Because of time constraints, this implementation couldn't be completed, so the evaluation chapter of this report doesn't contain results for this implementation.
+
+\subsection{Hybrid protocol in ONet}
+
+For the implementation of cosigning in the Cothority Overlay Network Library, the first design tried to insert the gossip logic into the treenode layer of ONet, since this layer had access to the TreeNodeInstance class, which represents a Cothority protocol instance, which is the main type of protocol that would use this library. Here we identified a problem with trying to add the gossip protocol in the ONet library. The shutdown of the gossiping would be problematic, since it requires a shutdown message to be propagated to enough peers, and this would affect all the metrics we are using to measure efficiency (duration time, number of messages sent and bandwith used).
+Then we decided that to keep the best of both protocols (tree based propagation and gossip based propagation), we would implement a hybrid of both, having a \emph{sendHybridRumor()} function in the overlay layer of ONet. This function can be used for the implementation of cosigning in a protocol external to ONet that has it as a dependency.
+
+Consequently, the new type of message added to the overlay layer of ONet, would be a hybrid between a rumor message and a tree-based message. For this hybrid-rumor propagation, there are two sub-rounds in every gossiping round. First, we create a $m$-ary tree with a depth of 2. The root node and all intermediary nodes would have a maximum of \emph{m} children nodes, which is a parameter received by the hybrid-rumor function. Then, once this tree is created, for the first sub-round the root sends the rumor to the intermediary nodes. They sign the message, send a response, and forward the rumor received to the leaf nodes.
+These leaf nodes just send their response to the intermediary node, which in turn forwards it to the root. After time $t$ (which is also a configurable parameter), the root node checks how many responses it has received. If it has received all the signatures from the tree, it finishes the gossiping round. If it is missing any signatures, the second sub-round starts, here it tries to contact the missing nodes directly, so a failing intermediary node doesn't affect the effectiveness of the propagation as much.
+
+The rumor message is stored in all the instances of overlay of the nodes that have received it. The responses received are stored only in the root node. There is also a static function added in the overlay, that has as input the rumor message that a node received, and the output of this function is sent as the response message. By default this function just returns the same message it received, but it can be customized by a Cothority protocol with its own implementation. This function will allow us to use the hybrid-rumor in a gossip protocol, since the signature of the message can be placed in this place, so the overlay layer doesn't need to know about Kyber suites or signature schemes.
+
+After this was completed inside ONet, we developed a cosigning protocol that simply runs many rounds of Hybrid Rumors being sent, until the threshold of received signatures is met. Finally these signatures are aggregated, the multi-signature is validated and sent to the application that requested the cosigning.

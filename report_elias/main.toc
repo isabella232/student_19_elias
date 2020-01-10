@@ -1,0 +1,24 @@
+\babel@toc {english}{}
+\contentsline {section}{\numberline {1}Introduction}{1}
+\contentsline {section}{\numberline {2}Background}{2}
+\contentsline {subsection}{\numberline {2.1}Gossip protocols}{2}
+\contentsline {subsection}{\numberline {2.2}Multi-signatures}{3}
+\contentsline {subsection}{\numberline {2.3}Existing protocol implementations}{4}
+\contentsline {subsubsection}{\numberline {2.3.1}BLS~CoSi protocol}{4}
+\contentsline {subsubsection}{\numberline {2.3.2}Gossip aggregation protocol}{5}
+\contentsline {subsection}{\numberline {2.4}Cothority Overlay Network Library - ONet}{6}
+\contentsline {section}{\numberline {3}Design and implementation}{7}
+\contentsline {subsection}{\numberline {3.1}Alternative gossip-based aggregation protocols}{7}
+\contentsline {subsubsection}{\numberline {3.1.1}Mask protocol}{7}
+\contentsline {subsubsection}{\numberline {3.1.2}Mask aggregation protocol}{8}
+\contentsline {subsubsection}{\numberline {3.1.3}Aggregation protocol with homomorphic subtraction}{9}
+\contentsline {subsection}{\numberline {3.2}Hybrid protocol in ONet}{9}
+\contentsline {section}{\numberline {4}Evaluation and results}{11}
+\contentsline {subsection}{\numberline {4.1}Methodology used for experimentally evaluating the protocol}{11}
+\contentsline {subsection}{\numberline {4.2}Parameter values used in simulations}{11}
+\contentsline {subsection}{\numberline {4.3}Comparison of the gossip protocol implementations}{12}
+\contentsline {subsection}{\numberline {4.4}Comparison of the ONet implementation with the existing gossip aggregation}{15}
+\contentsline {section}{\numberline {5}Conclusions}{17}
+\contentsline {section}{References}{19}
+\contentsline {section}{\numberline {A}Appendix: Installing and running the program}{21}
+\contentsline {section}{\numberline {B}Appendix: Full results}{21}
