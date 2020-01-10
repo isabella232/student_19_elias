@@ -1,0 +1,110 @@
+\begin{thebibliography}{10}
+
+\bibitem{Syta16}
+Ewa Syta, Iulia Tamas, Dylan Visher, David~Isaac Wolinsky, Philipp Jovanovic,
+  Linus Gasser, Nicolas Gailly, Ismail Khoffi, and Bryan Ford.
+\newblock Keeping authorities ``honest or bust'' with decentralized witness
+  cosigning.
+\newblock In {\em 2016 IEEE Symposium on Security and Privacy (SP)}, pages
+  526--545, 2016.
+
+\bibitem{Niki17}
+Kirill Nikitin, Eleftherios Kokoris-Kogias, Philipp Jovanovic, Nicolas Gailly,
+  Linus Gasser, Ismail Khoffi, Justin Cappos, and Bryan Ford.
+\newblock {CHAINIAC}: Proactive software-update transparency via collectively
+  signed skipchains and verified builds.
+\newblock In {\em 26th {USENIX} Security Symposium ({USENIX} Security 17)},
+  pages 1271--1287, 2017.
+
+\bibitem{Ford16}
+Bryan Ford.
+\newblock Apple, {FBI}, and software transparency.
+\newblock \url{http://bford.info/2016/03/10/apple/}, 2016.
+\newblock Accessed: December~28, 2019.
+
+\bibitem{Koko16}
+Eleftherios Kokoris-Kogias, Philipp Jovanovic, Nicolas Gailly, Ismail Khoffi,
+  Linus Gasser, and Bryan Ford.
+\newblock Enhancing bitcoin security and performance with strong consistency
+  via collective signing.
+\newblock In {\em 25th {USENIX} Security Symposium ({USENIX} Security 16)},
+  pages 279--296, 2016.
+
+\bibitem{Blscosi}
+DEDIS lab.
+\newblock {BLS} collective signing.
+\newblock \url{https://github.com/dedis/cothority/tree/master/blscosi}, 2019.
+\newblock Accessed: December~28, 2019.
+
+\bibitem{ProjExisting}
+Lukas Gelbmann.
+\newblock {BLS} cosigning via a gossip protocol.
+\newblock \url{https://github.com/dedis/student_19_gossip_bls}, 2019.
+\newblock Accessed: December~27, 2019.
+
+\bibitem{Boneh01}
+Dan Boneh, Ben Lynn, and Hovav Shacham.
+\newblock Short signatures from the {W}eil pairing.
+\newblock In {\em International Conference on the Theory and Application of
+  Cryptology and Information Security}, pages 514--532, 2001.
+
+\bibitem{Boneh03}
+Dan Boneh, Craig Gentry, Ben Lynn, and Hovav Shacham.
+\newblock Aggregate and verifiably encrypted signatures from bilinear maps.
+\newblock In {\em International Conference on the Theory and Applications of
+  Cryptographic Techniques}, pages 416--432, 2003.
+
+\bibitem{Boneh18}
+Dan Boneh, Manu Drijvers, and Gregory Neven.
+\newblock Compact multi-signatures for smaller blockchains.
+\newblock In {\em International Conference on the Theory and Application of
+  Cryptology and Information Security}, pages 435--464, 2018.
+
+\bibitem{Birm07}
+Ken Birman.
+\newblock The promise, and limitations, of gossip protocols.
+\newblock {\em ACM SIGOPS Operating Systems Review}, 41(5):8--13, 2007.
+
+\bibitem{Kerm07}
+Anne-Marie Kermarrec and Maarten Van~Steen.
+\newblock Gossiping in distributed systems.
+\newblock {\em ACM SIGOPS Operating Systems Review}, 41(5):2--7, 2007.
+
+\bibitem{Jela13}
+M{\'a}rk Jelasity.
+\newblock {\em Gossip-based Protocols for Large-scale Distributed Systems}.
+\newblock PhD thesis, University of Szeged, 2013.
+
+\bibitem{Kyber}
+DEDIS lab.
+\newblock Kyber~-- {A}dvanced crypto library for the {G}o language.
+\newblock \url{https://github.com/dedis/kyber}, 2019.
+\newblock Accessed: December~28, 2019.
+
+\bibitem{Snig18}
+Stepan Snigirev.
+\newblock {BLS} signatures: better than {S}chnorr.
+\newblock
+  \url{https://medium.com/cryptoadvance/bls-signatures-better-than-schnorr-5a7fe30ea716},
+  2018.
+\newblock Accessed: December~28, 2019.
+
+\bibitem{Coth}
+DEDIS lab.
+\newblock Cothority~-- {S}calable collective authority.
+\newblock \url{https://github.com/dedis/cothority}, 2019.
+\newblock Accessed: December~28, 2019.
+
+\bibitem{ONet}
+DEDIS lab.
+\newblock The cothority overlay network library~-~{O}{N}et.
+\newblock \url{https://github.com/dedis/onet}, 2020.
+\newblock Accessed: January~3, 2020.
+
+\bibitem{SemProjElias}
+Elias Manuel~Poroma Wiri.
+\newblock Code repository for this semester project.
+\newblock \url{https://github.com/dedis/student_19_elias}, 2020.
+\newblock Accessed: January~3, 2020.
+
+\end{thebibliography}

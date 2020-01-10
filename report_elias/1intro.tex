@@ -1,0 +1,28 @@
+\section{Introduction}
+
+Decentralized cosigning protocols collect signatures of a message, these signatures come from a group of many distributed peers. The collected signatures are then aggregated and 
+\emph{cosigning} (collective signing) protocols are used to validate the message.
+This type of protocol has many uses, for example a network authority (e.g. a certificate authority) can release an statement and have it validated by many other witnesses to improve security. This could prevent a malicious third party to abuse stolen private keys of the authority ~\cite{Syta16}.
+Another example is software updates signatures, which can have the added security of many witnesses for software builds~\cite{Niki17}, and protect users from updates that introduce backdoors or malware that could be provided by a compromised update server, or even by law enforcement intrusion~\cite{Ford16}.
+
+The \emph{\mbox{ByzCoin}} protocol~\cite{Koko16} developed at the DEDIS~lab at EPFL uses a cosigning protocol as the core of its blockchain and cryptocurrency implementation.
+In \mbox{ByzCoin}, a proposed block has to be signed by a minimum threshold number of nodes to be accepted as part of the blockchain. Using the cosigning protocol allows faster transaction confirmations, since blocks that contain transactions are appended to the blockchain much faster. Therefore message confirmation latency is very low, and this is one of the main improvements of \mbox{ByzCoin} over other cryptocurrencies such as Bitcoin. For fault tolerance, the cosigning protocol must tolerate a certain number of offline or malicious nodes. No single node should process an overwhelming amount of messages in order for the protocol to scale well, and the size of messages should be kept low.
+
+The goal of this semester project is to implement and evaluate alternative gossip protocol models for cosigning messages, and also a protocol in \emph{ONet} (The Cothority Overlay Network Library) to use for building collective signatures.
+An existing cosigning protocol built at the DEDIS~lab, \emph{BLS~CoSi}~\cite{Blscosi} is used as the reference for performance comparison. Another existing gossip-based cosigning protocol~\cite{ProjExisting} is also used as a starting point for the implementation.
+BLS~CoSi uses the Boneh-Lynn-Shacham signature scheme~\cite{Boneh01}, which supports \emph{multi-signatures}~\cite{Boneh03}.
+Multi-signatures are short signatures that can be used to verify the signing of a common message by a large number of parties.
+
+All cosigning protocols, existing and new, use a multi-signature scheme based on BLS signatures to reduce the amount of data transferred and stored, this type of signatures are relatively recent and proposed by Boneh, Drijvers and Neven~\cite{Boneh18}.
+The existing BLS~CoSi implementation is not efficient when some of the nodes fail, and the existing Gossip-based cosigning protocol fixes this problem, but has a increase of bandwidth and propagation time, so there is plenty of room for improvement. A gossip protocol is well-suited for the task of improving fault tolerance, but has some downsides that will be analyzed.
+This report introduces new cosigning protocols and then analyzes them based on an experimental evaluation using Cothority simulations.
+
+The main goal of the new protocols is to improve the efficiency when compared to the existing BLS~CoSi and gossip-based protocol. The protocol should be fast, while avoiding overwhelming participating nodes and being fault tolerant.
+The new protocol is designed mainly for the use case of \mbox{ByzCoin}, although other applications are certainly possible.
+
+Section 2 of this report gives some background on gossip protocols and the cryptographic tools used both in the old and new cosigning protocols, and outlining how the old protocols work.
+Section 3 presents the new gossip protocols' design and implementation.
+In Section 4, the evaluation methodology and setup used in the simulations is shown. Plots of the results are included.
+Finally, Section 5 is the conclusion, which discusses the findings, mentions the limitations, gives some insight on future work and improvements, and closes the report.
+
+

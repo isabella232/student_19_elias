@@ -1,0 +1,35 @@
+\section{Appendix: Installing and running the program}
+\label{axinstall}
+
+The code for the program is published on GitHub~\cite{SemProjElias}.
+It can be installed using Go~1.13 by running
+\begin{verbatim}
+go get github.com/dedis/student_19_elias
+\end{verbatim}
+
+Make sure that go.mod is pointing to the correct version of ONet. If needed, get the following ONet version (which has HybridRumor) and in go.mod point to the directory where this was cloned:
+\begin{verbatim}
+go get github.com/dedis/student_19_elias_onet
+\end{verbatim}
+
+Then navigate to the directory
+\begin{verbatim}
+student_elias/blscosi_hybrid_rumor/blscosi_hybrid_rumor/
+\end{verbatim}
+and running this command:
+\begin{verbatim}
+go install
+\end{verbatim}
+
+To launch a simulation, first install the simulation program in the directory
+\begin{verbatim}
+student_elias/blscosi_hybrid_rumor/simulation_bundle/
+\end{verbatim}
+again with the same command as above:
+\begin{verbatim}
+go install
+\end{verbatim}
+Then use a .toml file to set the parameters when running the command:
+\begin{verbatim}
+simulation_bundle local.toml
+\end{verbatim}
